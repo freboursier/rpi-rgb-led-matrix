@@ -256,6 +256,8 @@ static int usage(const char *progname) {
 }
 
 int main(int argc, char *argv[]) {
+    fprintf(stderr, "WAZAAA");
+	exit(0);
     Magick::InitializeMagick(*argv);
     
     RGBMatrix::Options matrix_options;

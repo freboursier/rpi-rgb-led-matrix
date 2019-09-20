@@ -1,7 +1,7 @@
 CFLAGS=-Wall -O3 -g -Wextra -Wno-unused-parameter
 CXXFLAGS=$(CFLAGS)
-OBJECTS=demo-main.o minimal-example.o c-example.o text-example.o scrolling-text-example.o clock.o ledcat.o input-example.o
-BINARIES=demo minimal-example c-example text-example scrolling-text-example clock ledcat input-example
+OBJECTS=demo-main.o minimal-example.o c-example.o text-example.o scrolling-text-example.o clock.o clock-square ledcat.o input-example.o
+BINARIES=demo minimal-example c-example text-example scrolling-text-example clock clock-square ledcat input-example
 
 # Where our library resides. You mostly only need to change the
 # RGB_LIB_DISTRIBUTION, this is where the library is checked out.
@@ -25,6 +25,8 @@ input-example : input-example.o
 text-example: text-example.o
 scrolling-text-example : scrolling-text-example.o
 clock : clock.o
+clock-square : clock-square.o
+
 ledcat : ledcat.o
 
 # All the binaries that have the same name as the object file.q
