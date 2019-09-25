@@ -1,9 +1,9 @@
-CXXFLAGS=-Wall -O3 -g -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64
+CXXFLAGS=-Wall -O3 -g -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -Wno-unused-function
 OBJECTS=led-image-viewer.o
 BINARIES=led-image-viewer
 
-OPTIONAL_OBJECTS=video-viewer.o emoji-scroller.c
-OPTIONAL_BINARIES=video-viewer emoji-scroller
+OPTIONAL_OBJECTS=video-viewer.o emoji-scroller.c dmd-slideshow.cc
+OPTIONAL_BINARIES=video-viewer emoji-scroller dmd-slideshow
 
 # Where our library resides. You mostly only need to change the
 # RGB_LIB_DISTRIBUTION, this is where the library is checked out.
@@ -27,6 +27,10 @@ $(RGB_LIBRARY): FORCE
 led-image-viewer: led-image-viewer.o $(RGB_LIBRARY)
 	$(CXX) $(CXXFLAGS) led-image-viewer.o -o $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
 
+dmd-slideshow: dmd-slideshow.o $(RGB_LIBRARY)
+	$(CXX) $(CXXFLAGS) dmd-slideshow.o -o $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
+
+
 emoji-scroller: emoji-scroller.o $(RGB_LIBRARY)
 	$(CXX) $(CXXFLAGS) emoji-scroller.o -o $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
 
@@ -36,6 +40,10 @@ video-viewer: video-viewer.o $(RGB_LIBRARY)
 
 %.o : %.cc
 	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) -c -o $@ $<
+
+
+dmd-slideshow.o : dmd-slideshow.cc
+	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) $(MAGICK_CXXFLAGS) -c -o $@ $<
 
 led-image-viewer.o : led-image-viewer.cc
 	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) $(MAGICK_CXXFLAGS) -c -o $@ $<
