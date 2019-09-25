@@ -116,12 +116,11 @@ void  *LoadFile(void *inParam)
     // Put together the animation from single frames. GIFs can have nasty
     // disposal modes, but they are handled nicely by coalesceImages()
      if (frames.size() > 1) {
-			Magick::coalesceImages((*loadedFile)[0].frames, frames.begin(), frames.end());
+			Magick::coalesceImages(&((*loadedFile)[0].frames), frames.begin(), frames.end());
 		} else {
-			inParam[0].frames->push_back(loadedFile[0]);   // just a single still image.
+//			&((*loadedFile)[0].frames)->push_back(loadedFile[0]);   // just a single still image.
 	}
-	int	ret = 0;
-pthread_exit(&ret);
+pthread_exit((void *)0);
 }
 
 
@@ -152,7 +151,7 @@ void		displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
 			int joinResult = pthread_tryjoin_np(workerThread, &threadRetval);
 			if (joinResult == 0) {
 				printf("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
-				print("Loaded frame count: %d", loadedFiles[0].
+								printf("Loaded frame count: %d\n", loadedFiles[0].frames.size());
 				workerThread = 0;
 			}
 		}
