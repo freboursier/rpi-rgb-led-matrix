@@ -23,7 +23,7 @@
 #include "pixel-mapper.h"
 #include "content-streamer.h"
 #include <pthread.h>
-
+#include <dirent.h>
 #include <fcntl.h>
 #include <math.h>
 #include <signal.h>
@@ -364,9 +364,9 @@ int main(int argc, char *argv[]) {
     }
     
     const char *stream_output = NULL;
-    
+    char *gifDirectory = NULL;
     int opt;
-    while ((opt = getopt(argc, argv, "w:t:l:c:P:hCO:")) != -1) {
+    while ((opt = getopt(argc, argv, "w:t:l:c:P:hCO:d:")) != -1) {
         switch (opt) {
             case 'w':
                 img_param.wait_ms = roundf(atof(optarg) * 1000.0f);
@@ -374,6 +374,9 @@ int main(int argc, char *argv[]) {
             case 't':
                 img_param.anim_duration_ms = roundf(atof(optarg) * 1000.0f);
                 break;
+case 'd':
+gifDirectory = optarg;
+break;
             case 'l':
                 img_param.loops = atoi(optarg);
                 break;
@@ -423,6 +426,33 @@ int main(int argc, char *argv[]) {
         }
     }
     
+
+DIR	*gifDir = opendir(gifDirectory);
+if (gifDir == NULL)
+{
+ fprintf(stderr, "Cannot open gif directory %s\n", gifDirectory);
+return 1;
+}
+errno = 0;
+
+
+while (1)
+{
+
+struct dirent *entry = readdir(gifDir);
+if (entry == NULL && errno == 0)
+{
+break;
+}
+//char *filePath = strcat(gifDirectory,  entry->d_name);
+char *filePath = (char *)malloc(sizeof(char) * (strlen(gifDirectory) + strlen(entry->d_name) + 1));
+//char *filePath = (char *)malloc(500);
+sprintf(filePath, "%s/%s", gifDirectory, entry->d_name);
+printf("Entry: %s\n", filePath);
+errno = 0;
+}
+
+
     const int filename_count = argc - optind;
     if (filename_count == 0) {
         fprintf(stderr, "Expected image filename.\n");
@@ -498,3 +528,4 @@ int main(int argc, char *argv[]) {
     // Leaking the FileInfos, but don't care at program end.
     return 0;
 }
+
