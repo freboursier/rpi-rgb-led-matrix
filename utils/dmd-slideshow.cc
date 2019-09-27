@@ -43,9 +43,11 @@
 #include <Magick++.h>
 #include <magick/image.h>
 
+#include    "dmd-slideshow-utils.hh"
+
 #define		FRAME_PER_SECOND		2.0
 std::vector<const char *> gl_filenames;
-	
+
 using rgb_matrix::GPIO;
 using rgb_matrix::Canvas;
 using rgb_matrix::FrameCanvas;
@@ -66,8 +68,8 @@ struct ImageParams {
 };
 
 struct	LoadedFile {
-	const char *filename;
-	std::vector<Magick::Image> frames;
+    const char *filename;
+    std::vector<Magick::Image> frames;
 };
 
 struct FileInfo {
@@ -98,82 +100,82 @@ static void SleepMillis(tmillis_t milli_seconds) {
 
 void  *LoadFile(void *inParam)
 {							  
-	std::vector<LoadedFile> *loadedFile = (std::vector<LoadedFile> *)inParam;
+    std::vector<LoadedFile> *loadedFile = (std::vector<LoadedFile> *)inParam;
     std::vector<Magick::Image> frames;
     try {
         readImages(&frames, gl_filenames[0]);
     } catch (std::exception& e) {
-		fprintf(stderr, "Exception: %s", e.what());
-		int	ret = 1;
+        fprintf(stderr, "Exception: %s", e.what());
+        int	ret = 1;
         pthread_exit(&ret);
     }
     if (frames.size() == 0) {
         fprintf(stderr, "No image found.");
-		int	ret = 1;
+        int	ret = 1;
         pthread_exit(&ret);
     }
     
     // Put together the animation from single frames. GIFs can have nasty
     // disposal modes, but they are handled nicely by coalesceImages()
-     if (frames.size() > 1) {
-			Magick::coalesceImages(&((*loadedFile)[0].frames), frames.begin(), frames.end());
-		} else {
-//			&((*loadedFile)[0].frames)->push_back(loadedFile[0]);   // just a single still image.
-	}
-pthread_exit((void *)0);
+    if (frames.size() > 1) {
+        Magick::coalesceImages(&((*loadedFile)[0].frames), frames.begin(), frames.end());
+    } else {
+        //			&((*loadedFile)[0].frames)->push_back(loadedFile[0]);   // just a single still image.
+    }
+    pthread_exit((void *)0);
 }
 
 
 
 void		displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
 {
-	FrameCanvas *offscreen_canvas = matrix->CreateFrameCanvas();
-	pthread_t workerThread = 0;
-	 
-	int		frameCount = 0;
-	std::vector<LoadedFile> loadedFiles(4);
-		
-	while (!interrupt_received)
-	{
-		tmillis_t	frame_start = GetTimeInMillis();
-		fprintf(stderr, "Start frame %d\n", frameCount);
-		
-		if (frameCount % 20 == 0 && workerThread == 0)
-		{
-			int ret = pthread_create(&workerThread, NULL, LoadFile, &loadedFiles);
-			if (ret) {
-				printf("Failed to create worker thread\n");
-			}
-		}
-		
-		if (workerThread) {
-			void	*threadRetval = NULL;
-			int joinResult = pthread_tryjoin_np(workerThread, &threadRetval);
-			if (joinResult == 0) {
-				printf("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
-								printf("Loaded frame count: %d\n", loadedFiles[0].frames.size());
-				workerThread = 0;
-			}
-		}
-
-		
-		tmillis_t	ellapsedTime = GetTimeInMillis() - frame_start;
-		tmillis_t	next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
-		SleepMillis(next_frame - frame_start);
-		
-		frameCount++;
-	}
-	
+    FrameCanvas *offscreen_canvas = matrix->CreateFrameCanvas();
+    pthread_t workerThread = 0;
+    
+    int		frameCount = 0;
+    std::vector<LoadedFile> loadedFiles(4);
+    
+    while (!interrupt_received)
+    {
+        tmillis_t	frame_start = GetTimeInMillis();
+        fprintf(stderr, "Start frame %d\n", frameCount);
+        
+        if (frameCount % 20 == 0 && workerThread == 0)
+        {
+            int ret = pthread_create(&workerThread, NULL, LoadFile, &loadedFiles);
+            if (ret) {
+                printf("Failed to create worker thread\n");
+            }
+        }
+        
+        if (workerThread) {
+            void	*threadRetval = NULL;
+            int joinResult = pthread_tryjoin_np(workerThread, &threadRetval);
+            if (joinResult == 0) {
+                printf("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
+                printf("Loaded frame count: %d\n", loadedFiles[0].frames.size());
+                workerThread = 0;
+            }
+        }
+        
+        
+        tmillis_t	ellapsedTime = GetTimeInMillis() - frame_start;
+        tmillis_t	next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
+        SleepMillis(next_frame - frame_start);
+        
+        frameCount++;
+    }
+    
 }
 
 static void StoreInStream(FileInfo *file,  std::vector<Magick::Image> image_sequence,
                           bool do_center,
                           rgb_matrix::FrameCanvas *scratch,
                           RGBMatrix *matrix) {
-							  const tmillis_t duration_ms = (file->is_multi_frame
+    const tmillis_t duration_ms = (file->is_multi_frame
                                    ? file->params.anim_duration_ms
                                    : file->params.wait_ms);
-							  int loops = file->params.loops;
+    int loops = file->params.loops;
     const tmillis_t end_time_ms = GetTimeInMillis() + duration_ms;
     const tmillis_t override_anim_delay = file->params.anim_delay_ms;
     for (int k = 0;
@@ -183,23 +185,23 @@ static void StoreInStream(FileInfo *file,  std::vector<Magick::Image> image_sequ
          ++k) {
         //uint32_t delay_us = 0;
         uint	frame_id = 0;
-
-
+        
+        
         while (!interrupt_received && GetTimeInMillis() <= end_time_ms
                /*&& reader.GetNext(offscreen_canvas, &delay_us)*/) {
-
-	        const Magick::Image &img = image_sequence[frame_id];
-	        int64_t delay_time_us;
-	        if (file->is_multi_frame) {
-	            delay_time_us = img.animationDelay() * 10000; // unit in 1/100s
-	        } else {
-	            delay_time_us = file->params.wait_ms * 1000;  // single image.
-	        }
-	        if (delay_time_us <= 0)
-			{
-				delay_time_us = 100 * 1000;  // 1/10sec
-			}
-
+            
+            const Magick::Image &img = image_sequence[frame_id];
+            int64_t delay_time_us;
+            if (file->is_multi_frame) {
+                delay_time_us = img.animationDelay() * 10000; // unit in 1/100s
+            } else {
+                delay_time_us = file->params.wait_ms * 1000;  // single image.
+            }
+            if (delay_time_us <= 0)
+            {
+                delay_time_us = 100 * 1000;  // 1/10sec
+            }
+            
             const tmillis_t anim_delay_ms =
             override_anim_delay >= 0 ? override_anim_delay : delay_time_us / 1000;
             const tmillis_t start_wait_ms = GetTimeInMillis();
@@ -217,7 +219,7 @@ static void StoreInStream(FileInfo *file,  std::vector<Magick::Image> image_sequ
                     }
                 }
             }
-
+            
             scratch = matrix->SwapOnVSync(scratch, file->params.vsync_multiple);
             const tmillis_t time_already_spent = GetTimeInMillis() - start_wait_ms;
             SleepMillis(anim_delay_ms - time_already_spent);
@@ -259,42 +261,42 @@ static bool LoadImageAndScale(const char *filename,
         result->push_back(frames[0]);   // just a single still image.
     }
     /*
-    const int img_width = (*result)[0].columns();
-    const int img_height = (*result)[0].rows();
-    const float width_fraction = (float)target_width / img_width;
-    const float height_fraction = (float)target_height / img_height;
-    if (fill_width && fill_height) {
-        // Scrolling diagonally. Fill as much as we can get in available space.
-        // Largest scale fraction determines that.
-        const float larger_fraction = (width_fraction > height_fraction)
-        ? width_fraction
-        : height_fraction;
-        target_width = (int) roundf(larger_fraction * img_width);
-        target_height = (int) roundf(larger_fraction * img_height);
-    }
-    else if (fill_height) {
-        // Horizontal scrolling: Make things fit in vertical space.
-        // While the height constraint stays the same, we can expand to full
-        // width as we scroll along that axis.
-        target_width = (int) roundf(height_fraction * img_width);
-    }
-    else if (fill_width) {
-        // dito, vertical. Make things fit in horizontal space.
-        target_height = (int) roundf(width_fraction * img_height);
-    }
-    fprintf(stdout, "initigal GIF loading took %.3fs; \n",
-	        (GetTimeInMillis() - start_load) / 1000.0);
-			
-			time_t	start_scale = GetTimeInMillis();
-    for (size_t i = 0; i < result->size(); ++i) {
-        (*result)[i].scale(Magick::Geometry(target_width, target_height));
-    }
-    fprintf(stdout, "GIF scaling took %.3fs; \n",
-            (GetTimeInMillis() - start_scale) / 1000.0);
-			
-    fprintf(stdout, "GIF loading took %.3fs; now: Display.\n",
-            (GetTimeInMillis() - start_load) / 1000.0);
-	*/
+     const int img_width = (*result)[0].columns();
+     const int img_height = (*result)[0].rows();
+     const float width_fraction = (float)target_width / img_width;
+     const float height_fraction = (float)target_height / img_height;
+     if (fill_width && fill_height) {
+     // Scrolling diagonally. Fill as much as we can get in available space.
+     // Largest scale fraction determines that.
+     const float larger_fraction = (width_fraction > height_fraction)
+     ? width_fraction
+     : height_fraction;
+     target_width = (int) roundf(larger_fraction * img_width);
+     target_height = (int) roundf(larger_fraction * img_height);
+     }
+     else if (fill_height) {
+     // Horizontal scrolling: Make things fit in vertical space.
+     // While the height constraint stays the same, we can expand to full
+     // width as we scroll along that axis.
+     target_width = (int) roundf(height_fraction * img_width);
+     }
+     else if (fill_width) {
+     // dito, vertical. Make things fit in horizontal space.
+     target_height = (int) roundf(width_fraction * img_height);
+     }
+     fprintf(stdout, "initigal GIF loading took %.3fs; \n",
+     (GetTimeInMillis() - start_load) / 1000.0);
+     
+     time_t	start_scale = GetTimeInMillis();
+     for (size_t i = 0; i < result->size(); ++i) {
+     (*result)[i].scale(Magick::Geometry(target_width, target_height));
+     }
+     fprintf(stdout, "GIF scaling took %.3fs; \n",
+     (GetTimeInMillis() - start_scale) / 1000.0);
+     
+     fprintf(stdout, "GIF loading took %.3fs; now: Display.\n",
+     (GetTimeInMillis() - start_load) / 1000.0);
+     */
     return true;
 }
 
@@ -336,7 +338,7 @@ static int usage(const char *progname) {
 }
 
 int main(int argc, char *argv[]) {
-	srand(time(0));
+    srand(time(0));
     Magick::InitializeMagick(*argv);
     
     RGBMatrix::Options matrix_options;
@@ -374,46 +376,46 @@ int main(int argc, char *argv[]) {
             case 't':
                 img_param.anim_duration_ms = roundf(atof(optarg) * 1000.0f);
                 break;
-case 'd':
-gifDirectory = optarg;
-break;
+            case 'd':
+                gifDirectory = optarg;
+                break;
             case 'l':
                 img_param.loops = atoi(optarg);
                 break;
-            // case 'f':
-            //     do_forever = true;
-            //     break;
+                // case 'f':
+                //     do_forever = true;
+                //     break;
             case 'C':
                 do_center = true;
                 break;
-            // case 's':
-            //     do_shuffle = true;
-            //     break;
-            // case 'r':
-            //     fprintf(stderr, "Instead of deprecated -r, use --led-rows=%s instead.\n",
-            //             optarg);
-            //     matrix_options.rows = atoi(optarg);
-            //     break;
-            // case 'c':
-            //     fprintf(stderr, "Instead of deprecated -c, use --led-chain=%s instead.\n",
-            //             optarg);
-            //     matrix_options.chain_length = atoi(optarg);
-            //     break;
+                // case 's':
+                //     do_shuffle = true;
+                //     break;
+                // case 'r':
+                //     fprintf(stderr, "Instead of deprecated -r, use --led-rows=%s instead.\n",
+                //             optarg);
+                //     matrix_options.rows = atoi(optarg);
+                //     break;
+                // case 'c':
+                //     fprintf(stderr, "Instead of deprecated -c, use --led-chain=%s instead.\n",
+                //             optarg);
+                //     matrix_options.chain_length = atoi(optarg);
+                //     break;
             case 'P':
                 matrix_options.parallel = atoi(optarg);
                 break;
-            // case 'L':
-            //     fprintf(stderr, "-L is deprecated. Use\n\t--led-pixel-mapper=\"U-mapper\" --led-chain=4\ninstead.\n");
-            //     return 1;
-            //     break;
-            // case 'R':
-            //     fprintf(stderr, "-R is deprecated. "
-            //             "Use --led-pixel-mapper=\"Rotate:%s\" instead.\n", optarg);
-            //     return 1;
-            //     break;
-            // case 'O':
-            //     stream_output = strdup(optarg);
-            //     break;
+                // case 'L':
+                //     fprintf(stderr, "-L is deprecated. Use\n\t--led-pixel-mapper=\"U-mapper\" --led-chain=4\ninstead.\n");
+                //     return 1;
+                //     break;
+                // case 'R':
+                //     fprintf(stderr, "-R is deprecated. "
+                //             "Use --led-pixel-mapper=\"Rotate:%s\" instead.\n", optarg);
+                //     return 1;
+                //     break;
+                // case 'O':
+                //     stream_output = strdup(optarg);
+                //     break;
             case 'h':
             default:
                 return usage(argv[0]);
@@ -426,46 +428,46 @@ break;
         }
     }
     
-
-DIR	*gifDir = opendir(gifDirectory);
-if (gifDir == NULL)
-{
- fprintf(stderr, "Cannot open gif directory %s\n", gifDirectory);
-return 1;
-}
-errno = 0;
-
-
-while (1)
-{
-
-struct dirent *entry = readdir(gifDir);
-if (entry == NULL && errno == 0)
-{
-break;
-}
-//char *filePath = strcat(gifDirectory,  entry->d_name);
-char *filePath = (char *)malloc(sizeof(char) * (strlen(gifDirectory) + strlen(entry->d_name) + 1));
-//char *filePath = (char *)malloc(500);
-sprintf(filePath, "%s/%s", gifDirectory, entry->d_name);
-printf("Entry: %s\n", filePath);
-errno = 0;
-}
-
-
-    const int filename_count = argc - optind;
-    if (filename_count == 0) {
-        fprintf(stderr, "Expected image filename.\n");
-        return usage(argv[0]);
-    }
     
+    DIR	*gifDir = opendir(gifDirectory);
+    if (gifDir == NULL)
+    {
+        fprintf(stderr, "Cannot open gif directory %s\n", gifDirectory);
+        return 1;
+    }
+    errno = 0;
+    
+    
+    while (1)
+    {
+        
+        struct dirent *entry = readdir(gifDir);
+        if (entry == NULL && errno == 0)
+        {
+            break;
+        }
+        //char *filePath = strcat(gifDirectory,  entry->d_name);
+        
+		if (isValidDirent(entry)) {
+			 int	mallocSize = sizeof(char) * (strlen(gifDirectory) + strlen(entry->d_name) + 2);
+	         char *filePath = ( char *)malloc(mallocSize);
+			 gl_filenames.push_back(filePath);
+		}
+        errno = 0;
+    }
+   
+   fprintf(stderr, "%d valid files\n", gl_filenames.size());
+   exit(1);
     // Prepare matrix
     runtime_opt.do_gpio_init = (stream_output == NULL);
     RGBMatrix *matrix = CreateMatrixFromOptions(matrix_options, runtime_opt);
     if (matrix == NULL)
+	{
+		fprintf(stderr, "Fatal: Failed to create matrix\n");
         return 1;
+	}
     
-   
+    
     
     printf("Size: %dx%d. Hardware gpio mapping: %s\n",
            matrix->width(), matrix->height(), matrix_options.hardware_mapping);
@@ -474,27 +476,27 @@ errno = 0;
     const bool fill_width = false;
     const bool fill_height = false;
     
-//    const tmillis_t start_load = GetTimeInMillis();
+    //    const tmillis_t start_load = GetTimeInMillis();
     fprintf(stderr, "Loading %d files...\n", argc - optind);
     // Preparing all the images beforehand as the Pi might be too slow to
     // be quickly switching between these. So preprocess.
-	
-
+    
+    
     for (int imgarg = optind; imgarg < argc; ++imgarg) {
         const char *filename = argv[imgarg];
-		gl_filenames.push_back(filename);
-	}
-	
-	
+        gl_filenames.push_back(filename);
+    }
+    
+    
     fprintf(stderr, "%d available images\n", gl_filenames.size());
-	
+    
     signal(SIGTERM, InterruptHandler);
     signal(SIGINT, InterruptHandler);
     
-	displayLoop(gl_filenames, matrix);
-	
-	
-//	exit(0);
+    displayLoop(gl_filenames, matrix);
+    
+    
+    //	exit(0);
     // std::vector<FileInfo*> file_imgs;
     // for (int imgarg = optind; imgarg < argc; ++imgarg) {
     //     const char *filename = argv[imgarg];

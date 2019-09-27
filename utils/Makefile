@@ -27,8 +27,8 @@ $(RGB_LIBRARY): FORCE
 led-image-viewer: led-image-viewer.o $(RGB_LIBRARY)
 	$(CXX) $(CXXFLAGS) led-image-viewer.o -o $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
 
-dmd-slideshow: dmd-slideshow.o $(RGB_LIBRARY)
-	$(CXX) $(CXXFLAGS) dmd-slideshow.o -o $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
+dmd-slideshow: dmd-slideshow-utils.o dmd-slideshow.o $(RGB_LIBRARY)
+	$(CXX) $(CXXFLAGS) dmd-slideshow.o dmd-slideshow-utils.o -o $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
 
 
 emoji-scroller: emoji-scroller.o $(RGB_LIBRARY)
@@ -41,7 +41,9 @@ video-viewer: video-viewer.o $(RGB_LIBRARY)
 %.o : %.cc
 	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) -c -o $@ $<
 
-
+dmd-slideshow-utils.o: dmd-slideshow-utils.cc
+	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) $(MAGICK_CXXFLAGS) -c -o $@ $<
+	
 dmd-slideshow.o : dmd-slideshow.cc
 	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) $(MAGICK_CXXFLAGS) -c -o $@ $<
 
