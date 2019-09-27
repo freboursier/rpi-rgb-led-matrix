@@ -1,4 +1,5 @@
-CXXFLAGS=-Wall -O3 -g -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -Wno-unused-function
+#reminder: re-enable -03
+CXXFLAGS=-Wall -g -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -Wno-unused-function
 OBJECTS=led-image-viewer.o
 BINARIES=led-image-viewer
 

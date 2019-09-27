@@ -45,7 +45,11 @@
 
 #include    "dmd-slideshow-utils.hh"
 
+//#define	MEGA_VERBOSE	
+
+#define		IMAGE_DISPLAY_DURATION	2.0
 #define		FRAME_PER_SECOND		2.0
+
 std::vector<const char *> gl_filenames;
 
 using rgb_matrix::GPIO;
@@ -68,8 +72,12 @@ struct ImageParams {
 };
 
 struct	LoadedFile {
+	LoadedFile(): is_multi_frame(0), currentFrameID(0){};
     const char *filename;
     std::vector<Magick::Image> frames;
+	bool is_multi_frame;
+	unsigned int	currentFrameID;
+	unsigned int frameCount;
 };
 
 struct FileInfo {
@@ -100,33 +108,68 @@ static void SleepMillis(tmillis_t milli_seconds) {
 
 void  *LoadFile(void *inParam)
 {							  
-    std::vector<LoadedFile> *loadedFile = (std::vector<LoadedFile> *)inParam;
-    std::vector<Magick::Image> frames;
-    try {
-        readImages(&frames, gl_filenames[0]);
-    } catch (std::exception& e) {
-        fprintf(stderr, "Exception: %s", e.what());
-        int	ret = 1;
-        pthread_exit(&ret);
-    }
-    if (frames.size() == 0) {
-        fprintf(stderr, "No image found.");
-        int	ret = 1;
-        pthread_exit(&ret);
-    }
-    
-    // Put together the animation from single frames. GIFs can have nasty
-    // disposal modes, but they are handled nicely by coalesceImages()
-    if (frames.size() > 1) {
-        Magick::coalesceImages(&((*loadedFile)[0].frames), frames.begin(), frames.end());
-    } else {
-        //			&((*loadedFile)[0].frames)->push_back(loadedFile[0]);   // just a single still image.
-    }
+    std::vector<LoadedFile> *loadedFiles = (std::vector<LoadedFile> *)inParam;
+	
+	for (unsigned int i = 0; i < loadedFiles->size(); i++)
+	{
+	
+	    std::vector<Magick::Image> frames;
+		int	randCount = rand() % gl_filenames.size();
+		fprintf(stderr, "Available image count: %d, bet on %d\n", gl_filenames.size(), randCount);
+		const char	*imagePath = gl_filenames[randCount];
+	    try {
+			fprintf(stderr, "Attempt to load >%s<\n", imagePath);
+	        readImages(&frames, imagePath);
+	    } catch (std::exception& e) {
+	        fprintf(stderr, "Exception: %s", e.what());
+	        pthread_exit((void *)1);
+	    }
+	    if (frames.size() == 0) {
+	        fprintf(stderr, "No image found.");
+	        pthread_exit((void *)1);
+	    }
+		(*loadedFiles)[i].is_multi_frame = frames.size() > 1;
+	    
+	    // Put together the animation from single frames. GIFs can have nasty
+	    // disposal modes, but they are handled nicely by coalesceImages()
+	    if (frames.size() > 1) {
+	        Magick::coalesceImages(&((*loadedFiles)[i].frames), frames.begin(), frames.end());
+	    } else {
+	        //			&((*loadedFile)[0].frames)->push_back(loadedFile[0]);   // just a single still image.
+	    }
+	}
     pthread_exit((void *)0);
 }
 
+void	blitzFrameInCanvas(FrameCanvas *offscreen_canvas, const Magick::Image &img, unsigned int position)
+{
+	int	x_offset = position % 2 == 0 ? 0 : 128;
+	
+	int	y_offset = position <= 1 ? 0 : 32;
+    for (size_t y = 0; y < img.rows(); ++y) {
+        for (size_t x = 0; x < img.columns(); ++x) {
+            const Magick::Color &c = img.pixelColor(x, y);
+            if (c.alphaQuantum() < 256) {
+                offscreen_canvas->SetPixel(x + x_offset, y + y_offset,
+                                  ScaleQuantumToChar(c.redQuantum()),
+                                  ScaleQuantumToChar(c.greenQuantum()),
+                                  ScaleQuantumToChar(c.blueQuantum()));
+            }
+        }
+    }
+}
 
-
+void	drawCross(FrameCanvas *offscreen_canvas)
+{
+	for (int i = 0; i < 256; i++)
+	{
+        offscreen_canvas->SetPixel(x + x_offset, y + y_offset,
+                          ScaleQuantumToChar(0),
+                          ScaleQuantumToChar(0),
+                          ScaleQuantumToChar(0));
+	}
+}
+	
 void		displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
 {
     FrameCanvas *offscreen_canvas = matrix->CreateFrameCanvas();
@@ -134,13 +177,13 @@ void		displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
     
     int		frameCount = 0;
     std::vector<LoadedFile> loadedFiles(4);
-    
+    bool	initialLoadDone = false;
     while (!interrupt_received)
     {
         tmillis_t	frame_start = GetTimeInMillis();
         fprintf(stderr, "Start frame %d\n", frameCount);
         
-        if (frameCount % 20 == 0 && workerThread == 0)
+        if (frameCount % 5 == 0 && workerThread == 0)
         {
             int ret = pthread_create(&workerThread, NULL, LoadFile, &loadedFiles);
             if (ret) {
@@ -155,10 +198,19 @@ void		displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
                 printf("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
                 printf("Loaded frame count: %d\n", loadedFiles[0].frames.size());
                 workerThread = 0;
+				initialLoadDone =   true;
             }
         }
         
-        
+		if (initialLoadDone) {
+			for (unsigned int i = 0; i < 4; i++)
+			{
+				const Magick::Image &img = loadedFiles[i].frames[0];
+				blitzFrameInCanvas(offscreen_canvas, img, i);
+			}
+			drawCross(offscreen_canvas);
+			offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+		}
         tmillis_t	ellapsedTime = GetTimeInMillis() - frame_start;
         tmillis_t	next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
         SleepMillis(next_frame - frame_start);
@@ -300,42 +352,6 @@ static bool LoadImageAndScale(const char *filename,
     return true;
 }
 
-static int usage(const char *progname) {
-    fprintf(stderr, "usage: %s [options] <image> [option] [<image> ...]\n",
-            progname);
-    
-    fprintf(stderr, "Options:\n"
-            "\t-O<streamfile>            : Output to stream-file instead of matrix (Don't need to be root).\n"
-            "\t-C                        : Center images.\n"
-            
-            "\nThese options affect images FOLLOWING them on the command line,\n"
-            "so it is possible to have different options for each image\n"
-            "\t-w<seconds>               : Regular image: "
-            "Wait time in seconds before next image is shown (default: 1.5).\n"
-            "\t-t<seconds>               : "
-            "For animations: stop after this time.\n"
-            "\t-l<loop-count>            : "
-            "For animations: number of loops through a full cycle.\n"
-            "\t                            gif/stream animation with this value. Use -1 to use default value.\n"
-            "\t-V<vsync-multiple>        : For animation (expert): Only do frame vsync-swaps on multiples of refresh (default: 1)\n"
-            
-            );
-    
-    fprintf(stderr, "\nGeneral LED matrix options:\n");
-    rgb_matrix::PrintMatrixFlags(stderr);
-    
-    fprintf(stderr,
-            "\nSwitch time between files: "
-            "-w for static images; -t/-l for animations\n"
-            "Animated gifs: If both -l and -t are given, "
-            "whatever finishes first determines duration.\n");
-    
-    fprintf(stderr, "\nThe -w, -t and -l options apply to the following images "
-            "until a new instance of one of these options is seen.\n"
-            "So you can choose different durations for different images.\n");
-    
-    return 1;
-}
 
 int main(int argc, char *argv[]) {
     srand(time(0));
@@ -451,13 +467,20 @@ int main(int argc, char *argv[]) {
 		if (isValidDirent(entry)) {
 			 int	mallocSize = sizeof(char) * (strlen(gifDirectory) + strlen(entry->d_name) + 2);
 	         char *filePath = ( char *)malloc(mallocSize);
+			 sprintf(filePath, "%s/%s", gifDirectory, entry->d_name);
 			 gl_filenames.push_back(filePath);
 		}
         errno = 0;
     }
    
    fprintf(stderr, "%d valid files\n", gl_filenames.size());
-   exit(1);
+#ifdef	MEGA_VERBOSE
+   for (unsigned int i = 0; i < gl_filenames.size(); i++)
+   {
+	   fprintf(stderr, ">%s<\n", gl_filenames[i]);
+   }
+#endif
+
     // Prepare matrix
     runtime_opt.do_gpio_init = (stream_output == NULL);
     RGBMatrix *matrix = CreateMatrixFromOptions(matrix_options, runtime_opt);
@@ -477,16 +500,16 @@ int main(int argc, char *argv[]) {
     const bool fill_height = false;
     
     //    const tmillis_t start_load = GetTimeInMillis();
-    fprintf(stderr, "Loading %d files...\n", argc - optind);
+    // fprintf(stderr, "Loading %d files...\n", argc - optind);
     // Preparing all the images beforehand as the Pi might be too slow to
     // be quickly switching between these. So preprocess.
     
     
-    for (int imgarg = optind; imgarg < argc; ++imgarg) {
-        const char *filename = argv[imgarg];
-        gl_filenames.push_back(filename);
-    }
-    
+    // for (int imgarg = optind; imgarg < argc; ++imgarg) {
+    //     const char *filename = argv[imgarg];
+    //     gl_filenames.push_back(filename);
+    // }
+    //
     
     fprintf(stderr, "%d available images\n", gl_filenames.size());
     
