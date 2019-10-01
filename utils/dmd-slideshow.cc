@@ -48,7 +48,7 @@
 //#define	MEGA_VERBOSE	
 
 #define		IMAGE_DISPLAY_DURATION	2.0
-#define		FRAME_PER_SECOND		2.0
+#define		FRAME_PER_SECOND		5.0
 
 std::vector<const char *> gl_filenames;
 
@@ -72,12 +72,14 @@ struct ImageParams {
 };
 
 struct	LoadedFile {
-	LoadedFile(): is_multi_frame(0), currentFrameID(0){};
+	LoadedFile(): is_multi_frame(0), currentFrameID(0), nextFrameTime(-distant_future){};
     const char *filename;
     std::vector<Magick::Image> frames;
 	bool is_multi_frame;
 	unsigned int	currentFrameID;
 	unsigned int frameCount;
+//	 int64_t delay_time_us;
+	tmillis_t	nextFrameTime;
 };
 
 struct FileInfo {
@@ -104,15 +106,43 @@ static void SleepMillis(tmillis_t milli_seconds) {
     nanosleep(&ts, NULL);
 }
 
+bool	initialLoadDone = false;
 
+void	setThreadPriority(int priority, uint32_t affinity_mask)
+{
+	  int err;
+    if (priority > 0) {
+      struct sched_param p;
+      p.sched_priority = priority;
+      if ((err = pthread_setschedparam(pthread_self(), SCHED_FIFO, &p))) {
+        fprintf(stderr, "FYI: Can't set realtime thread priority=%d %s\n",
+                priority, strerror(err));
+      }
+    }
+
+    if (affinity_mask != 0) {
+      cpu_set_t cpu_mask;
+      CPU_ZERO(&cpu_mask);
+      for (int i = 0; i < 32; ++i) {
+        if ((affinity_mask & (1<<i)) != 0) {
+          CPU_SET(i, &cpu_mask);
+        }
+      }
+      if ((err=pthread_setaffinity_np(pthread_self(), sizeof(cpu_mask), &cpu_mask))) {
+		  fprintf(stderr, "FYI: Couldn't set affinity 0x%x: %s\n",
+		          affinity_mask, strerror(err));
+      }
+    }
+}
 
 void  *LoadFile(void *inParam)
-{							  
+{					
+	fprintf(stderr, "Start worker thread\n");
+	setThreadPriority(1, (1<<2));
     std::vector<LoadedFile> *loadedFiles = (std::vector<LoadedFile> *)inParam;
 	
 	for (unsigned int i = 0; i < loadedFiles->size(); i++)
 	{
-	
 	    std::vector<Magick::Image> frames;
 		int	randCount = rand() % gl_filenames.size();
 		fprintf(stderr, "Available image count: %d, bet on %d\n", gl_filenames.size(), randCount);
@@ -129,7 +159,8 @@ void  *LoadFile(void *inParam)
 	        pthread_exit((void *)1);
 	    }
 		(*loadedFiles)[i].is_multi_frame = frames.size() > 1;
-	    
+	    (*loadedFiles)[i].frameCount = frames.size();
+		(*loadedFiles)[i].nextFrameTime = GetTimeInMillis();
 	    // Put together the animation from single frames. GIFs can have nasty
 	    // disposal modes, but they are handled nicely by coalesceImages()
 	    if (frames.size() > 1) {
@@ -138,6 +169,7 @@ void  *LoadFile(void *inParam)
 	        //			&((*loadedFile)[0].frames)->push_back(loadedFile[0]);   // just a single still image.
 	    }
 	}
+
     pthread_exit((void *)0);
 }
 
@@ -163,10 +195,15 @@ void	drawCross(FrameCanvas *offscreen_canvas)
 {
 	for (int i = 0; i < 256; i++)
 	{
-        offscreen_canvas->SetPixel(x + x_offset, y + y_offset,
+        offscreen_canvas->SetPixel(i, 31,
                           ScaleQuantumToChar(0),
                           ScaleQuantumToChar(0),
                           ScaleQuantumToChar(0));
+				          offscreen_canvas->SetPixel(i, 32,
+				                            ScaleQuantumToChar(0),
+				                            ScaleQuantumToChar(0),
+				                            ScaleQuantumToChar(0));
+						  
 	}
 }
 	
@@ -177,13 +214,14 @@ void		displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
     
     int		frameCount = 0;
     std::vector<LoadedFile> loadedFiles(4);
-    bool	initialLoadDone = false;
+    std::vector<LoadedFile> currentImages(4);
+	
     while (!interrupt_received)
     {
         tmillis_t	frame_start = GetTimeInMillis();
         fprintf(stderr, "Start frame %d\n", frameCount);
         
-        if (frameCount % 5 == 0 && workerThread == 0)
+        if (frameCount % 20 == 0 && workerThread == 0)
         {
             int ret = pthread_create(&workerThread, NULL, LoadFile, &loadedFiles);
             if (ret) {
@@ -196,16 +234,47 @@ void		displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
             int joinResult = pthread_tryjoin_np(workerThread, &threadRetval);
             if (joinResult == 0) {
                 printf("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
-                printf("Loaded frame count: %d\n", loadedFiles[0].frames.size());
+				std::vector<LoadedFile>  tmp = currentImages;
+				currentImages = loadedFiles;
+				loadedFiles = tmp;
+				
                 workerThread = 0;
-				initialLoadDone =   true;
+				initialLoadDone = true;
             }
         }
         
 		if (initialLoadDone) {
 			for (unsigned int i = 0; i < 4; i++)
 			{
-				const Magick::Image &img = loadedFiles[i].frames[0];
+				bool	needFrameChange = GetTimeInMillis() > currentImages[i].nextFrameTime;
+				fprintf(stderr, "Current time is %lld, nextFrameTime is %lld, => %s\n", GetTimeInMillis(), currentImages[i].nextFrameTime, needFrameChange ? "YES" : "NO");
+				if (needFrameChange)
+				{
+					fprintf(stderr, "Select next frame for file %d\n", i);
+					currentImages[i].currentFrameID = (currentImages[i].currentFrameID + 1) % currentImages[i].frames.size();
+				}
+				
+				
+				
+				
+				const Magick::Image &img = currentImages[i].frames[currentImages[i].currentFrameID];
+				if (needFrameChange)
+				{
+					int64_t delay_time_us;
+		
+			        if (currentImages[i].is_multi_frame) {
+			          delay_time_us = img.animationDelay() * 1000; // unit in 1/100s
+			        } else {
+			          delay_time_us = 5 * 1000;  // single image.
+			        }
+			        if (delay_time_us <= 0) {
+						delay_time_us = 100 * 1000;  // 1/10sec
+					}
+					fprintf(stderr, "delay_time_us: %.3lld\n", delay_time_us);
+						currentImages[i].nextFrameTime = GetTimeInMillis() + delay_time_us;
+						
+				}
+				
 				blitzFrameInCanvas(offscreen_canvas, img, i);
 			}
 			drawCross(offscreen_canvas);
@@ -398,40 +467,12 @@ int main(int argc, char *argv[]) {
             case 'l':
                 img_param.loops = atoi(optarg);
                 break;
-                // case 'f':
-                //     do_forever = true;
-                //     break;
             case 'C':
                 do_center = true;
                 break;
-                // case 's':
-                //     do_shuffle = true;
-                //     break;
-                // case 'r':
-                //     fprintf(stderr, "Instead of deprecated -r, use --led-rows=%s instead.\n",
-                //             optarg);
-                //     matrix_options.rows = atoi(optarg);
-                //     break;
-                // case 'c':
-                //     fprintf(stderr, "Instead of deprecated -c, use --led-chain=%s instead.\n",
-                //             optarg);
-                //     matrix_options.chain_length = atoi(optarg);
-                //     break;
             case 'P':
                 matrix_options.parallel = atoi(optarg);
                 break;
-                // case 'L':
-                //     fprintf(stderr, "-L is deprecated. Use\n\t--led-pixel-mapper=\"U-mapper\" --led-chain=4\ninstead.\n");
-                //     return 1;
-                //     break;
-                // case 'R':
-                //     fprintf(stderr, "-R is deprecated. "
-                //             "Use --led-pixel-mapper=\"Rotate:%s\" instead.\n", optarg);
-                //     return 1;
-                //     break;
-                // case 'O':
-                //     stream_output = strdup(optarg);
-                //     break;
             case 'h':
             default:
                 return usage(argv[0]);
