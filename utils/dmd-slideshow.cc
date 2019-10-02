@@ -45,10 +45,10 @@
 
 #include    "dmd-slideshow-utils.hh"
 
-//#define	MEGA_VERBOSE	
+//#define    MEGA_VERBOSE
 
-#define		IMAGE_DISPLAY_DURATION	2.0
-#define		FRAME_PER_SECOND		5.0
+#define        IMAGE_DISPLAY_DURATION    5
+#define        FRAME_PER_SECOND        30
 
 std::vector<const char *> gl_filenames;
 
@@ -71,15 +71,15 @@ struct ImageParams {
     int vsync_multiple;
 };
 
-struct	LoadedFile {
-	LoadedFile(): is_multi_frame(0), currentFrameID(0), nextFrameTime(-distant_future){};
+struct    LoadedFile {
+    LoadedFile(): is_multi_frame(0), currentFrameID(0), nextFrameTime(-distant_future){};
     const char *filename;
     std::vector<Magick::Image> frames;
-	bool is_multi_frame;
-	unsigned int	currentFrameID;
-	unsigned int frameCount;
-//	 int64_t delay_time_us;
-	tmillis_t	nextFrameTime;
+    bool is_multi_frame;
+    unsigned int    currentFrameID;
+    unsigned int frameCount;
+    //     int64_t delay_time_us;
+    tmillis_t    nextFrameTime;
 };
 
 struct FileInfo {
@@ -106,122 +106,128 @@ static void SleepMillis(tmillis_t milli_seconds) {
     nanosleep(&ts, NULL);
 }
 
-bool	initialLoadDone = false;
+bool    initialLoadDone = false;
 
-void	setThreadPriority(int priority, uint32_t affinity_mask)
+void    setThreadPriority(int priority, uint32_t affinity_mask)
 {
-	  int err;
+    int err;
     if (priority > 0) {
-      struct sched_param p;
-      p.sched_priority = priority;
-      if ((err = pthread_setschedparam(pthread_self(), SCHED_FIFO, &p))) {
-        fprintf(stderr, "FYI: Can't set realtime thread priority=%d %s\n",
-                priority, strerror(err));
-      }
-    }
-
-    if (affinity_mask != 0) {
-      cpu_set_t cpu_mask;
-      CPU_ZERO(&cpu_mask);
-      for (int i = 0; i < 32; ++i) {
-        if ((affinity_mask & (1<<i)) != 0) {
-          CPU_SET(i, &cpu_mask);
+        struct sched_param p;
+        p.sched_priority = priority;
+        if ((err = pthread_setschedparam(pthread_self(), SCHED_FIFO, &p))) {
+            fprintf(stderr, "FYI: Can't set realtime thread priority=%d %s\n",
+                    priority, strerror(err));
         }
-      }
-      if ((err=pthread_setaffinity_np(pthread_self(), sizeof(cpu_mask), &cpu_mask))) {
-		  fprintf(stderr, "FYI: Couldn't set affinity 0x%x: %s\n",
-		          affinity_mask, strerror(err));
-      }
+    }
+    
+    if (affinity_mask != 0) {
+        cpu_set_t cpu_mask;
+        CPU_ZERO(&cpu_mask);
+        for (int i = 0; i < 32; ++i) {
+            if ((affinity_mask & (1<<i)) != 0) {
+                CPU_SET(i, &cpu_mask);
+            }
+        }
+        if ((err=pthread_setaffinity_np(pthread_self(), sizeof(cpu_mask), &cpu_mask))) {
+            fprintf(stderr, "FYI: Couldn't set affinity 0x%x: %s\n",
+                    affinity_mask, strerror(err));
+        }
     }
 }
 
 void  *LoadFile(void *inParam)
-{					
-	fprintf(stderr, "Start worker thread\n");
-	setThreadPriority(1, (1<<2));
+{
+    fprintf(stderr, "Start worker thread\n");
+    setThreadPriority(3, (1<<2));
     std::vector<LoadedFile> *loadedFiles = (std::vector<LoadedFile> *)inParam;
-	
-	for (unsigned int i = 0; i < loadedFiles->size(); i++)
-	{
-	    std::vector<Magick::Image> frames;
-		int	randCount = rand() % gl_filenames.size();
-		fprintf(stderr, "Available image count: %d, bet on %d\n", gl_filenames.size(), randCount);
-		const char	*imagePath = gl_filenames[randCount];
-	    try {
-			fprintf(stderr, "Attempt to load >%s<\n", imagePath);
-	        readImages(&frames, imagePath);
-	    } catch (std::exception& e) {
-	        fprintf(stderr, "Exception: %s", e.what());
-	        pthread_exit((void *)1);
-	    }
-	    if (frames.size() == 0) {
-	        fprintf(stderr, "No image found.");
-	        pthread_exit((void *)1);
-	    }
-		(*loadedFiles)[i].is_multi_frame = frames.size() > 1;
-	    (*loadedFiles)[i].frameCount = frames.size();
-		(*loadedFiles)[i].nextFrameTime = GetTimeInMillis();
-	    // Put together the animation from single frames. GIFs can have nasty
-	    // disposal modes, but they are handled nicely by coalesceImages()
-	    if (frames.size() > 1) {
-	        Magick::coalesceImages(&((*loadedFiles)[i].frames), frames.begin(), frames.end());
-	    } else {
-	        //			&((*loadedFile)[0].frames)->push_back(loadedFile[0]);   // just a single still image.
-	    }
-	}
-
+    
+    // int    loopCount = 500;
+  //   if (initialLoadDone == false)
+  //   {
+  //       loopCount = loadedFiles->size();
+  //   }
+  //
+    for (unsigned int i = 0; i < loadedFiles->size(); i++)
+    {
+        std::vector<Magick::Image> frames;
+        int    randCount = rand() % gl_filenames.size();
+  //      fprintf(stderr, "Available image count: %d, bet on %d\n", gl_filenames.size(), randCount);
+        const char    *imagePath = gl_filenames[randCount];
+        try {
+//            fprintf(stderr, "Attempt to load >%s<\n", imagePath);
+            readImages(&frames, imagePath);
+        } catch (std::exception& e) {
+            fprintf(stderr, "Exception: %s", e.what());
+            pthread_exit((void *)1);
+        }
+        if (frames.size() == 0) {
+            fprintf(stderr, "No image found.");
+            pthread_exit((void *)1);
+        }
+        (*loadedFiles)[i % loadedFiles->size()].is_multi_frame = frames.size() > 1;
+        (*loadedFiles)[i % loadedFiles->size()].frameCount = frames.size();
+        (*loadedFiles)[i % loadedFiles->size()].nextFrameTime = GetTimeInMillis();
+        // Put together the animation from single frames. GIFs can have nasty
+        // disposal modes, but they are handled nicely by coalesceImages()
+        if (frames.size() > 1) {
+            Magick::coalesceImages(&((*loadedFiles)[i % loadedFiles->size()].frames), frames.begin(), frames.end());
+        } else {
+            //            &((*loadedFile)[0].frames)->push_back(loadedFile[0]);   // just a single still image.
+        }
+    }
+    
     pthread_exit((void *)0);
 }
 
-void	blitzFrameInCanvas(FrameCanvas *offscreen_canvas, const Magick::Image &img, unsigned int position)
+void    blitzFrameInCanvas(FrameCanvas *offscreen_canvas, const Magick::Image &img, unsigned int position)
 {
-	int	x_offset = position % 2 == 0 ? 0 : 128;
-	
-	int	y_offset = position <= 1 ? 0 : 32;
+    int    x_offset = position % 2 == 0 ? 0 : 128;
+    
+    int    y_offset = position <= 1 ? 0 : 32;
     for (size_t y = 0; y < img.rows(); ++y) {
         for (size_t x = 0; x < img.columns(); ++x) {
             const Magick::Color &c = img.pixelColor(x, y);
             if (c.alphaQuantum() < 256) {
                 offscreen_canvas->SetPixel(x + x_offset, y + y_offset,
-                                  ScaleQuantumToChar(c.redQuantum()),
-                                  ScaleQuantumToChar(c.greenQuantum()),
-                                  ScaleQuantumToChar(c.blueQuantum()));
+                                           ScaleQuantumToChar(c.redQuantum()),
+                                           ScaleQuantumToChar(c.greenQuantum()),
+                                           ScaleQuantumToChar(c.blueQuantum()));
             }
         }
     }
 }
 
-void	drawCross(FrameCanvas *offscreen_canvas)
+void    drawCross(FrameCanvas *offscreen_canvas)
 {
-	for (int i = 0; i < 256; i++)
-	{
+    for (int i = 0; i < 256; i++)
+    {
         offscreen_canvas->SetPixel(i, 31,
-                          ScaleQuantumToChar(0),
-                          ScaleQuantumToChar(0),
-                          ScaleQuantumToChar(0));
-				          offscreen_canvas->SetPixel(i, 32,
-				                            ScaleQuantumToChar(0),
-				                            ScaleQuantumToChar(0),
-				                            ScaleQuantumToChar(0));
-						  
-	}
+                                   ScaleQuantumToChar(0),
+                                   ScaleQuantumToChar(0),
+                                   ScaleQuantumToChar(0));
+        offscreen_canvas->SetPixel(i, 32,
+                                   ScaleQuantumToChar(0),
+                                   ScaleQuantumToChar(0),
+                                   ScaleQuantumToChar(0));
+        
+    }
 }
-	
-void		displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
+
+void        displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
 {
     FrameCanvas *offscreen_canvas = matrix->CreateFrameCanvas();
     pthread_t workerThread = 0;
     
-    int		frameCount = 0;
+    int        frameCount = 0;
     std::vector<LoadedFile> loadedFiles(4);
     std::vector<LoadedFile> currentImages(4);
-	
+    
     while (!interrupt_received)
     {
-        tmillis_t	frame_start = GetTimeInMillis();
-        fprintf(stderr, "Start frame %d\n", frameCount);
+        tmillis_t    frame_start = GetTimeInMillis();
+//        fprintf(stderr, "Start frame %d\n", frameCount);
         
-        if (frameCount % 20 == 0 && workerThread == 0)
+        if (frameCount % (FRAME_PER_SECOND * IMAGE_DISPLAY_DURATION) == 0 && workerThread == 0)
         {
             int ret = pthread_create(&workerThread, NULL, LoadFile, &loadedFiles);
             if (ret) {
@@ -230,58 +236,69 @@ void		displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
         }
         
         if (workerThread) {
-            void	*threadRetval = NULL;
+            void    *threadRetval = NULL;
             int joinResult = pthread_tryjoin_np(workerThread, &threadRetval);
             if (joinResult == 0) {
                 printf("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
-				std::vector<LoadedFile>  tmp = currentImages;
-				currentImages = loadedFiles;
-				loadedFiles = tmp;
-				
+                std::vector<LoadedFile>  tmp = currentImages;
+                currentImages = loadedFiles;
+                loadedFiles = tmp;
+                
                 workerThread = 0;
-				initialLoadDone = true;
+                initialLoadDone = true;
             }
         }
         
-		if (initialLoadDone) {
-			for (unsigned int i = 0; i < 4; i++)
-			{
-				bool	needFrameChange = GetTimeInMillis() > currentImages[i].nextFrameTime;
-				fprintf(stderr, "Current time is %lld, nextFrameTime is %lld, => %s\n", GetTimeInMillis(), currentImages[i].nextFrameTime, needFrameChange ? "YES" : "NO");
-				if (needFrameChange)
-				{
-					fprintf(stderr, "Select next frame for file %d\n", i);
-					currentImages[i].currentFrameID = (currentImages[i].currentFrameID + 1) % currentImages[i].frames.size();
-				}
-				
-				
-				
-				
-				const Magick::Image &img = currentImages[i].frames[currentImages[i].currentFrameID];
-				if (needFrameChange)
-				{
-					int64_t delay_time_us;
-		
-			        if (currentImages[i].is_multi_frame) {
-			          delay_time_us = img.animationDelay() * 1000; // unit in 1/100s
-			        } else {
-			          delay_time_us = 5 * 1000;  // single image.
-			        }
-			        if (delay_time_us <= 0) {
-						delay_time_us = 100 * 1000;  // 1/10sec
-					}
-					fprintf(stderr, "delay_time_us: %.3lld\n", delay_time_us);
-						currentImages[i].nextFrameTime = GetTimeInMillis() + delay_time_us;
-						
-				}
-				
-				blitzFrameInCanvas(offscreen_canvas, img, i);
-			}
-			drawCross(offscreen_canvas);
-			offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
-		}
-        tmillis_t	ellapsedTime = GetTimeInMillis() - frame_start;
-        tmillis_t	next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
+        if (initialLoadDone) {
+            
+            bool        shouldChangeDisplay = false;
+            
+            for (unsigned int i = 0; i < 4; i++)
+            {
+                bool    needFrameChange = GetTimeInMillis() > currentImages[i].nextFrameTime;
+                if (needFrameChange) {
+                    shouldChangeDisplay = true;
+                    break;
+                }
+            }
+//            fprintf(stderr, "Current time is %lld, nextFrameTime is %lld, => %s\n", GetTimeInMillis(), currentImages[i].nextFrameTime, needFrameChange ? "YES" : "NO");
+            if (shouldChangeDisplay) {
+                for (unsigned int i = 0; i < 4; i++)
+                {
+					bool    needFrameChange = GetTimeInMillis() > currentImages[i].nextFrameTime;
+                    if (needFrameChange)
+                    {
+//                        fprintf(stderr, "Select next frame for file %d\n", i);
+                        currentImages[i].currentFrameID = (currentImages[i].currentFrameID + 1) % currentImages[i].frames.size();
+                    }
+                    
+                    const Magick::Image &img = currentImages[i].frames[currentImages[i].currentFrameID];
+                    if (needFrameChange)
+                    {
+                        int64_t delay_time_us;
+                        
+                        if (currentImages[i].is_multi_frame) {
+                            delay_time_us = img.animationDelay() * 1000; // unit in 1/100s
+                        } else {
+                            delay_time_us = 5 * 1000;  // single image.
+                        }
+                        if (delay_time_us <= 0) {
+                            delay_time_us = 100 * 1000;  // 1/10sec
+                        }
+  //                      fprintf(stderr, "delay_time_us: %.3lld\n", delay_time_us);
+                        currentImages[i].nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
+                        
+                    }
+                    
+                    blitzFrameInCanvas(offscreen_canvas, img, i);
+                }
+                drawCross(offscreen_canvas);
+                offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+            }
+        }
+        
+        tmillis_t    ellapsedTime = GetTimeInMillis() - frame_start;
+        tmillis_t    next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
         SleepMillis(next_frame - frame_start);
         
         frameCount++;
@@ -305,7 +322,7 @@ static void StoreInStream(FileInfo *file,  std::vector<Magick::Image> image_sequ
          && GetTimeInMillis() < end_time_ms;
          ++k) {
         //uint32_t delay_us = 0;
-        uint	frame_id = 0;
+        uint    frame_id = 0;
         
         
         while (!interrupt_received && GetTimeInMillis() <= end_time_ms
@@ -362,7 +379,7 @@ static bool LoadImageAndScale(const char *filename,
                               std::vector<Magick::Image> *result,
                               std::string *err_msg) {
     std::vector<Magick::Image> frames;
-    time_t	start_load = GetTimeInMillis();
+    time_t    start_load = GetTimeInMillis();
     try {
         readImages(&frames, filename);
     } catch (std::exception& e) {
@@ -408,7 +425,7 @@ static bool LoadImageAndScale(const char *filename,
      fprintf(stdout, "initigal GIF loading took %.3fs; \n",
      (GetTimeInMillis() - start_load) / 1000.0);
      
-     time_t	start_scale = GetTimeInMillis();
+     time_t    start_scale = GetTimeInMillis();
      for (size_t i = 0; i < result->size(); ++i) {
      (*result)[i].scale(Magick::Geometry(target_width, target_height));
      }
@@ -486,7 +503,7 @@ int main(int argc, char *argv[]) {
     }
     
     
-    DIR	*gifDir = opendir(gifDirectory);
+    DIR    *gifDir = opendir(gifDirectory);
     if (gifDir == NULL)
     {
         fprintf(stderr, "Cannot open gif directory %s\n", gifDirectory);
@@ -505,31 +522,31 @@ int main(int argc, char *argv[]) {
         }
         //char *filePath = strcat(gifDirectory,  entry->d_name);
         
-		if (isValidDirent(entry)) {
-			 int	mallocSize = sizeof(char) * (strlen(gifDirectory) + strlen(entry->d_name) + 2);
-	         char *filePath = ( char *)malloc(mallocSize);
-			 sprintf(filePath, "%s/%s", gifDirectory, entry->d_name);
-			 gl_filenames.push_back(filePath);
-		}
+        if (isValidDirent(entry)) {
+            int    mallocSize = sizeof(char) * (strlen(gifDirectory) + strlen(entry->d_name) + 2);
+            char *filePath = ( char *)malloc(mallocSize);
+            sprintf(filePath, "%s/%s", gifDirectory, entry->d_name);
+            gl_filenames.push_back(filePath);
+        }
         errno = 0;
     }
-   
-   fprintf(stderr, "%d valid files\n", gl_filenames.size());
-#ifdef	MEGA_VERBOSE
-   for (unsigned int i = 0; i < gl_filenames.size(); i++)
-   {
-	   fprintf(stderr, ">%s<\n", gl_filenames[i]);
-   }
+    
+    fprintf(stderr, "%d valid files\n", gl_filenames.size());
+#ifdef    MEGA_VERBOSE
+    for (unsigned int i = 0; i < gl_filenames.size(); i++)
+    {
+        fprintf(stderr, ">%s<\n", gl_filenames[i]);
+    }
 #endif
-
+    
     // Prepare matrix
     runtime_opt.do_gpio_init = (stream_output == NULL);
     RGBMatrix *matrix = CreateMatrixFromOptions(matrix_options, runtime_opt);
     if (matrix == NULL)
-	{
-		fprintf(stderr, "Fatal: Failed to create matrix\n");
+    {
+        fprintf(stderr, "Fatal: Failed to create matrix\n");
         return 1;
-	}
+    }
     
     
     
@@ -560,7 +577,7 @@ int main(int argc, char *argv[]) {
     displayLoop(gl_filenames, matrix);
     
     
-    //	exit(0);
+    //    exit(0);
     // std::vector<FileInfo*> file_imgs;
     // for (int imgarg = optind; imgarg < argc; ++imgarg) {
     //     const char *filename = argv[imgarg];
