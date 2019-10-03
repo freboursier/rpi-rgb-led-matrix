@@ -301,7 +301,8 @@ static bool LoadImageAndScale(const char *filename,
 int main(int argc, char *argv[]) {
     srand(time(0));
     Magick::InitializeMagick(*argv);
-    std::vector<FileCollection>	collections;
+    std::vector<FileCollection>	fullScreenCollections;
+	std::vector<FileCollection>	crossCollections;
     RGBMatrix::Options matrix_options;
     rgb_matrix::RuntimeOptions runtime_opt;
     if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv,
@@ -314,7 +315,7 @@ int main(int argc, char *argv[]) {
     const char *stream_output = NULL;
     char *gifDirectory = NULL;
     int opt;
-    while ((opt = getopt(argc, argv, "w:t:l:c:P:hCO:d:")) != -1) {
+    while ((opt = getopt(argc, argv, "w:t:l:c:P:hO:d:c:f:")) != -1) {
         switch (opt) {
             // case 'w':
             //     img_param.wait_ms = roundf(atof(optarg) * 1000.0f);
@@ -325,6 +326,20 @@ int main(int argc, char *argv[]) {
             case 'd':
                 gifDirectory = optarg;
                 break;
+			case 'c':
+			{
+			FileCollection	newCollection;
+			newCollection.regex = optarg;
+			crossCollections.push_back(newCollection);
+		}
+				break;
+			case 'f':
+			{
+			FileCollection	newCollection;
+			newCollection.regex = optarg;
+			fullScreenCollections.push_back(newCollection);
+		}
+			break;
             // case 'l':
  //                img_param.loops = atoi(optarg);
  //                break;
@@ -377,6 +392,12 @@ int main(int argc, char *argv[]) {
     }
 #endif
 	
+	for (int z = 0; z < crossCollections.size(); z++)
+	{
+		fprintf(stderr, "crossCollections %s\n", crossCollections[z].regex);
+	}
+	exit(2);
+	
     for (int i = optind; i < argc; ++i) {
 		fprintf(stderr, "Create collection %s\n", argv[i]);
 		////////////
@@ -388,7 +409,7 @@ int main(int argc, char *argv[]) {
 		//char msgbuf[100];
 
 		/* Compile regular expression */
-		int reti = regcomp(&regex, argv[i], 0);
+		int reti = regcomp(&regex, argv[i], REG_ICASE);
 		if (reti) {
 		    fprintf(stderr, "Could not compile regex\n");
 //		    exit(1);
@@ -406,7 +427,7 @@ int main(int argc, char *argv[]) {
 			}
 	    }
 		
-		collections.push_back(newCollection);
+		crossCollections.push_back(newCollection);
 
 		/* Free memory allocated to the pattern buffer by regcomp() */
 		regfree(&regex);
