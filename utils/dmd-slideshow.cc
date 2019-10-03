@@ -34,6 +34,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <regex.h>
 
 #include <algorithm>
 #include <map>
@@ -43,6 +44,7 @@
 #include <Magick++.h>
 #include <magick/image.h>
 
+#include "dmd-slideshow.h"
 #include    "dmd-slideshow-utils.hh"
 
 //#define    MEGA_VERBOSE
@@ -58,82 +60,10 @@ using rgb_matrix::FrameCanvas;
 using rgb_matrix::RGBMatrix;
 using rgb_matrix::StreamReader;
 
-typedef int64_t tmillis_t;
-static const tmillis_t distant_future = (1LL<<40); // that is a while.
-
-struct ImageParams {
-    ImageParams() : anim_duration_ms(distant_future), wait_ms(1500),
-    anim_delay_ms(-1), loops(-1), vsync_multiple(1) {}
-    tmillis_t anim_duration_ms;  // If this is an animation, duration to show.
-    tmillis_t wait_ms;           // Regular image: duration to show.
-    tmillis_t anim_delay_ms;     // Animation delay override.
-    int loops;
-    int vsync_multiple;
-};
-
-struct    LoadedFile {
-    LoadedFile(): is_multi_frame(0), currentFrameID(0), nextFrameTime(-distant_future){};
-    const char *filename;
-    std::vector<Magick::Image> frames;
-    bool is_multi_frame;
-    unsigned int    currentFrameID;
-    unsigned int frameCount;
-    //     int64_t delay_time_us;
-    tmillis_t    nextFrameTime;
-};
-
-struct FileInfo {
-    ImageParams params;      // Each file might have specific timing settings
-    bool is_multi_frame;
-};
-
-volatile bool interrupt_received = false;
-static void InterruptHandler(int signo) {
-    interrupt_received = true;
-}
-
-static tmillis_t GetTimeInMillis() {
-    struct timeval tp;
-    gettimeofday(&tp, NULL);
-    return tp.tv_sec * 1000 + tp.tv_usec / 1000;
-}
-
-static void SleepMillis(tmillis_t milli_seconds) {
-    if (milli_seconds <= 0) return;
-    struct timespec ts;
-    ts.tv_sec = milli_seconds / 1000;
-    ts.tv_nsec = (milli_seconds % 1000) * 1000000;
-    nanosleep(&ts, NULL);
-}
 
 bool    initialLoadDone = false;
 
-void    setThreadPriority(int priority, uint32_t affinity_mask)
-{
-    int err;
-    if (priority > 0) {
-        struct sched_param p;
-        p.sched_priority = priority;
-        if ((err = pthread_setschedparam(pthread_self(), SCHED_FIFO, &p))) {
-            fprintf(stderr, "FYI: Can't set realtime thread priority=%d %s\n",
-                    priority, strerror(err));
-        }
-    }
-    
-    if (affinity_mask != 0) {
-        cpu_set_t cpu_mask;
-        CPU_ZERO(&cpu_mask);
-        for (int i = 0; i < 32; ++i) {
-            if ((affinity_mask & (1<<i)) != 0) {
-                CPU_SET(i, &cpu_mask);
-            }
-        }
-        if ((err=pthread_setaffinity_np(pthread_self(), sizeof(cpu_mask), &cpu_mask))) {
-            fprintf(stderr, "FYI: Couldn't set affinity 0x%x: %s\n",
-                    affinity_mask, strerror(err));
-        }
-    }
-}
+
 
 void  *LoadFile(void *inParam)
 {
@@ -141,12 +71,6 @@ void  *LoadFile(void *inParam)
     setThreadPriority(3, (1<<2));
     std::vector<LoadedFile> *loadedFiles = (std::vector<LoadedFile> *)inParam;
     
-    // int    loopCount = 500;
-  //   if (initialLoadDone == false)
-  //   {
-  //       loopCount = loadedFiles->size();
-  //   }
-  //
     for (unsigned int i = 0; i < loadedFiles->size(); i++)
     {
         std::vector<Magick::Image> frames;
@@ -306,71 +230,6 @@ void        displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
     
 }
 
-static void StoreInStream(FileInfo *file,  std::vector<Magick::Image> image_sequence,
-                          bool do_center,
-                          rgb_matrix::FrameCanvas *scratch,
-                          RGBMatrix *matrix) {
-    const tmillis_t duration_ms = (file->is_multi_frame
-                                   ? file->params.anim_duration_ms
-                                   : file->params.wait_ms);
-    int loops = file->params.loops;
-    const tmillis_t end_time_ms = GetTimeInMillis() + duration_ms;
-    const tmillis_t override_anim_delay = file->params.anim_delay_ms;
-    for (int k = 0;
-         (loops < 0 || k < loops)
-         && !interrupt_received
-         && GetTimeInMillis() < end_time_ms;
-         ++k) {
-        //uint32_t delay_us = 0;
-        uint    frame_id = 0;
-        
-        
-        while (!interrupt_received && GetTimeInMillis() <= end_time_ms
-               /*&& reader.GetNext(offscreen_canvas, &delay_us)*/) {
-            
-            const Magick::Image &img = image_sequence[frame_id];
-            int64_t delay_time_us;
-            if (file->is_multi_frame) {
-                delay_time_us = img.animationDelay() * 10000; // unit in 1/100s
-            } else {
-                delay_time_us = file->params.wait_ms * 1000;  // single image.
-            }
-            if (delay_time_us <= 0)
-            {
-                delay_time_us = 100 * 1000;  // 1/10sec
-            }
-            
-            const tmillis_t anim_delay_ms =
-            override_anim_delay >= 0 ? override_anim_delay : delay_time_us / 1000;
-            const tmillis_t start_wait_ms = GetTimeInMillis();
-            scratch->Clear();
-            const int x_offset = do_center ? (scratch->width() - img.columns()) / 2 : 0;
-            const int y_offset = do_center ? (scratch->height() - img.rows()) / 2 : 0;
-            for (size_t y = 0; y < img.rows(); ++y) {
-                for (size_t x = 0; x < img.columns(); ++x) {
-                    const Magick::Color &c = img.pixelColor(x, y);
-                    if (c.alphaQuantum() < 256) {
-                        scratch->SetPixel(x + x_offset, y + y_offset,
-                                          ScaleQuantumToChar(c.redQuantum()),
-                                          ScaleQuantumToChar(c.greenQuantum()),
-                                          ScaleQuantumToChar(c.blueQuantum()));
-                    }
-                }
-            }
-            
-            scratch = matrix->SwapOnVSync(scratch, file->params.vsync_multiple);
-            const tmillis_t time_already_spent = GetTimeInMillis() - start_wait_ms;
-            SleepMillis(anim_delay_ms - time_already_spent);
-            frame_id++;
-            if (frame_id == image_sequence.size())
-            {
-                frame_id = 0;
-            }
-        }
-    }
-}
-
-
 // Load still image or animation.
 // Scale, so that it fits in "width" and "height" and store in "result".
 static bool LoadImageAndScale(const char *filename,
@@ -379,7 +238,7 @@ static bool LoadImageAndScale(const char *filename,
                               std::vector<Magick::Image> *result,
                               std::string *err_msg) {
     std::vector<Magick::Image> frames;
-    time_t    start_load = GetTimeInMillis();
+    //time_t    start_load = GetTimeInMillis();
     try {
         readImages(&frames, filename);
     } catch (std::exception& e) {
@@ -442,7 +301,7 @@ static bool LoadImageAndScale(const char *filename,
 int main(int argc, char *argv[]) {
     srand(time(0));
     Magick::InitializeMagick(*argv);
-    
+    std::vector<FileCollection>	collections;
     RGBMatrix::Options matrix_options;
     rgb_matrix::RuntimeOptions runtime_opt;
     if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv,
@@ -450,43 +309,28 @@ int main(int argc, char *argv[]) {
         return usage(argv[0]);
     }
     
-    bool do_center = false;
-    
-    // We remember ImageParams for each image, which will change whenever
-    // there is a flag modifying them. This map keeps track of filenames
-    // and their image params (also for unrelated elements of argv[], but doesn't
-    // matter).
-    // We map the pointer instad of the string of the argv parameter so that
-    // we can have two times the same image on the commandline list with different
-    // parameters.
-    std::map<const void *, struct ImageParams> filename_params;
-    
-    // Set defaults.
-    ImageParams img_param;
-    for (int i = 0; i < argc; ++i) {
-        filename_params[argv[i]] = img_param;
-    }
+   // bool do_center = false;
     
     const char *stream_output = NULL;
     char *gifDirectory = NULL;
     int opt;
     while ((opt = getopt(argc, argv, "w:t:l:c:P:hCO:d:")) != -1) {
         switch (opt) {
-            case 'w':
-                img_param.wait_ms = roundf(atof(optarg) * 1000.0f);
-                break;
-            case 't':
-                img_param.anim_duration_ms = roundf(atof(optarg) * 1000.0f);
-                break;
+            // case 'w':
+            //     img_param.wait_ms = roundf(atof(optarg) * 1000.0f);
+            //     break;
+            // case 't':
+            //     img_param.anim_duration_ms = roundf(atof(optarg) * 1000.0f);
+            //     break;
             case 'd':
                 gifDirectory = optarg;
                 break;
-            case 'l':
-                img_param.loops = atoi(optarg);
-                break;
-            case 'C':
-                do_center = true;
-                break;
+            // case 'l':
+ //                img_param.loops = atoi(optarg);
+ //                break;
+            // case 'C':
+  //               do_center = true;
+  //               break;
             case 'P':
                 matrix_options.parallel = atoi(optarg);
                 break;
@@ -494,13 +338,7 @@ int main(int argc, char *argv[]) {
             default:
                 return usage(argv[0]);
         }
-        
-        // Starting from the current file, set all the remaining files to
-        // the latest change.
-        for (int i = optind; i < argc; ++i) {
-            filename_params[argv[i]] = img_param;
-        }
-    }
+         }
     
     
     DIR    *gifDir = opendir(gifDirectory);
@@ -538,7 +376,47 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, ">%s<\n", gl_filenames[i]);
     }
 #endif
-    
+	
+    for (int i = optind; i < argc; ++i) {
+		fprintf(stderr, "Create collection %s\n", argv[i]);
+		////////////
+		
+		FileCollection	newCollection;
+		newCollection.regex = argv[i];
+		
+		regex_t regex;
+		//char msgbuf[100];
+
+		/* Compile regular expression */
+		int reti = regcomp(&regex, argv[i], 0);
+		if (reti) {
+		    fprintf(stderr, "Could not compile regex\n");
+//		    exit(1);
+		}
+		
+		/* Execute regular expression */
+	    for (unsigned int j = 0; j < gl_filenames.size(); j++)
+	    {
+	       // fprintf(stderr, ">%s<\n", gl_filenames[i]);
+			reti = regexec(&regex, gl_filenames[j], 0, NULL, 0);
+			if (!reti) {
+			   fprintf(stderr,"Match %s => %s\n", argv[i], gl_filenames[j]);
+			   newCollection.filePaths.push_back(gl_filenames[j]);
+			   
+			}
+	    }
+		
+		collections.push_back(newCollection);
+
+		/* Free memory allocated to the pattern buffer by regcomp() */
+		regfree(&regex);
+		
+		//////////
+		
+		
+    }
+	exit(0);
+	
     // Prepare matrix
     runtime_opt.do_gpio_init = (stream_output == NULL);
     RGBMatrix *matrix = CreateMatrixFromOptions(matrix_options, runtime_opt);
@@ -554,8 +432,8 @@ int main(int argc, char *argv[]) {
            matrix->width(), matrix->height(), matrix_options.hardware_mapping);
     
     // These parameters are needed once we do scrolling.
-    const bool fill_width = false;
-    const bool fill_height = false;
+    // const bool fill_width = false;
+    // const bool fill_height = false;
     
     //    const tmillis_t start_load = GetTimeInMillis();
     // fprintf(stderr, "Loading %d files...\n", argc - optind);

@@ -60,3 +60,30 @@ int usage(const char *progname) {
     
     return (1);
 }
+
+void    setThreadPriority(int priority, uint32_t affinity_mask)
+{
+    int err;
+    if (priority > 0) {
+        struct sched_param p;
+        p.sched_priority = priority;
+        if ((err = pthread_setschedparam(pthread_self(), SCHED_FIFO, &p))) {
+            fprintf(stderr, "FYI: Can't set realtime thread priority=%d %s\n",
+                    priority, strerror(err));
+        }
+    }
+    
+    if (affinity_mask != 0) {
+        cpu_set_t cpu_mask;
+        CPU_ZERO(&cpu_mask);
+        for (int i = 0; i < 32; ++i) {
+            if ((affinity_mask & (1<<i)) != 0) {
+                CPU_SET(i, &cpu_mask);
+            }
+        }
+        if ((err=pthread_setaffinity_np(pthread_self(), sizeof(cpu_mask), &cpu_mask))) {
+            fprintf(stderr, "FYI: Couldn't set affinity 0x%x: %s\n",
+                    affinity_mask, strerror(err));
+        }
+    }
+}
