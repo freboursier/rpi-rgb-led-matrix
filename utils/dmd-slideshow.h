@@ -24,8 +24,16 @@ struct    LoadedFile {
     tmillis_t    nextFrameTime;
 };
 
+typedef enum  {
+	FullScreen = 0,
+	Cross = 1
+  } ScreenMode;
+
 struct	FileCollection {
+	FileCollection() : screenMode(FullScreen) , displayDuration(10){}
 	const char *regex;
+	ScreenMode	screenMode;
+	unsigned 	int	displayDuration;
 	std::vector<const char *>filePaths;
 };
 

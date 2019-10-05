@@ -17,7 +17,7 @@
 // $ sudo apt-get install libgraphicsmagick++-dev libwebp-dev
 //
 // Then compile with
-// $ make led-image-viewer
+// $ make dmd-slideshow
 
 #include "led-matrix.h"
 #include "pixel-mapper.h"
@@ -301,14 +301,14 @@ static bool LoadImageAndScale(const char *filename,
 int main(int argc, char *argv[]) {
     srand(time(0));
     Magick::InitializeMagick(*argv);
-    std::vector<FileCollection>	fullScreenCollections;
-	std::vector<FileCollection>	crossCollections;
+    std::vector<FileCollection>	collections;
     RGBMatrix::Options matrix_options;
     rgb_matrix::RuntimeOptions runtime_opt;
     if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv,
                                            &matrix_options, &runtime_opt)) {
         return usage(argv[0]);
     }
+	int	displayDuration = 10;
     
    // bool do_center = false;
     
@@ -317,9 +317,9 @@ int main(int argc, char *argv[]) {
     int opt;
     while ((opt = getopt(argc, argv, "w:t:l:c:P:hO:d:c:f:")) != -1) {
         switch (opt) {
-            // case 'w':
-            //     img_param.wait_ms = roundf(atof(optarg) * 1000.0f);
-            //     break;
+             case 'w':
+			      displayDuration = atoi(optarg);
+		     break;
             // case 't':
             //     img_param.anim_duration_ms = roundf(atof(optarg) * 1000.0f);
             //     break;
@@ -329,15 +329,19 @@ int main(int argc, char *argv[]) {
 			case 'c':
 			{
 			FileCollection	newCollection;
+			newCollection.screenMode = Cross;
+			newCollection.displayDuration = displayDuration;
 			newCollection.regex = optarg;
-			crossCollections.push_back(newCollection);
+			collections.push_back(newCollection);
 		}
 				break;
 			case 'f':
 			{
 			FileCollection	newCollection;
+			newCollection.screenMode = FullScreen;
+			newCollection.displayDuration = displayDuration;
 			newCollection.regex = optarg;
-			fullScreenCollections.push_back(newCollection);
+			collections.push_back(newCollection);
 		}
 			break;
             // case 'l':
@@ -392,24 +396,24 @@ int main(int argc, char *argv[]) {
     }
 #endif
 	
-	for (int z = 0; z < crossCollections.size(); z++)
+	for (unsigned int z = 0; z < collections.size(); z++)
 	{
-		fprintf(stderr, "crossCollections %s\n", crossCollections[z].regex);
+		fprintf(stderr, "collections %s\n", collections[z].regex);
 	}
-	exit(2);
 	
-    for (int i = optind; i < argc; ++i) {
-		fprintf(stderr, "Create collection %s\n", argv[i]);
+    //for (int i = optind; i < argc; ++i) {
+	for (unsigned int i = 0; i < collections.size(); i++)
+	{	
+		fprintf(stderr, "Fill collection %s\n", collections[i].regex);
 		////////////
 		
-		FileCollection	newCollection;
-		newCollection.regex = argv[i];
+	
 		
 		regex_t regex;
 		//char msgbuf[100];
 
 		/* Compile regular expression */
-		int reti = regcomp(&regex, argv[i], REG_ICASE);
+		int reti = regcomp(&regex, collections[i].regex, REG_ICASE);
 		if (reti) {
 		    fprintf(stderr, "Could not compile regex\n");
 //		    exit(1);
@@ -421,13 +425,13 @@ int main(int argc, char *argv[]) {
 	       // fprintf(stderr, ">%s<\n", gl_filenames[i]);
 			reti = regexec(&regex, gl_filenames[j], 0, NULL, 0);
 			if (!reti) {
-			   fprintf(stderr,"Match %s => %s\n", argv[i], gl_filenames[j]);
-			   newCollection.filePaths.push_back(gl_filenames[j]);
+			   fprintf(stderr,"Match %s => %s\n", collections[i].regex, gl_filenames[j]);
+			   collections[i].filePaths.push_back(gl_filenames[j]);
 			   
 			}
 	    }
 		
-		crossCollections.push_back(newCollection);
+		//crossCollections.push_back(newCollection);
 
 		/* Free memory allocated to the pattern buffer by regcomp() */
 		regfree(&regex);

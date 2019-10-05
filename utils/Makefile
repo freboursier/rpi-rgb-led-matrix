@@ -3,7 +3,7 @@ CXXFLAGS=-Wall -g -O3 -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -Wno-
 OBJECTS=led-image-viewer.o
 BINARIES=led-image-viewer
 
-OPTIONAL_OBJECTS=video-viewer.o emoji-scroller.c dmd-slideshow.cc
+OPTIONAL_OBJECTS=video-viewer.o emoji-scroller.o dmd-slideshow.o
 OPTIONAL_BINARIES=video-viewer emoji-scroller dmd-slideshow
 
 # Where our library resides. You mostly only need to change the
