@@ -344,12 +344,6 @@ int main(int argc, char *argv[]) {
 			collections.push_back(newCollection);
 		}
 			break;
-            // case 'l':
- //                img_param.loops = atoi(optarg);
- //                break;
-            // case 'C':
-  //               do_center = true;
-  //               break;
             case 'P':
                 matrix_options.parallel = atoi(optarg);
                 break;
@@ -430,7 +424,7 @@ int main(int argc, char *argv[]) {
 			   
 			}
 	    }
-		
+		fprintf(stderr, "\t%d pictures\n", collections[i].filePaths.size());
 		//crossCollections.push_back(newCollection);
 
 		/* Free memory allocated to the pattern buffer by regcomp() */
@@ -440,7 +434,7 @@ int main(int argc, char *argv[]) {
 		
 		
     }
-	exit(0);
+//	exit(0);
 	
     // Prepare matrix
     runtime_opt.do_gpio_init = (stream_output == NULL);
@@ -456,21 +450,6 @@ int main(int argc, char *argv[]) {
     printf("Size: %dx%d. Hardware gpio mapping: %s\n",
            matrix->width(), matrix->height(), matrix_options.hardware_mapping);
     
-    // These parameters are needed once we do scrolling.
-    // const bool fill_width = false;
-    // const bool fill_height = false;
-    
-    //    const tmillis_t start_load = GetTimeInMillis();
-    // fprintf(stderr, "Loading %d files...\n", argc - optind);
-    // Preparing all the images beforehand as the Pi might be too slow to
-    // be quickly switching between these. So preprocess.
-    
-    
-    // for (int imgarg = optind; imgarg < argc; ++imgarg) {
-    //     const char *filename = argv[imgarg];
-    //     gl_filenames.push_back(filename);
-    // }
-    //
     
     fprintf(stderr, "%d available images\n", gl_filenames.size());
     
