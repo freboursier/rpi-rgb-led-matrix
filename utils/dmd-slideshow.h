@@ -35,6 +35,7 @@ struct	FileCollection {
 	ScreenMode	screenMode;
 	unsigned 	int	displayDuration;
 	std::vector<const char *>filePaths;
+	std::vector<LoadedFile> loadedFiles;
 };
 
 volatile bool interrupt_received = false;

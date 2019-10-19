@@ -185,14 +185,12 @@ void        displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
                     break;
                 }
             }
-//            fprintf(stderr, "Current time is %lld, nextFrameTime is %lld, => %s\n", GetTimeInMillis(), currentImages[i].nextFrameTime, needFrameChange ? "YES" : "NO");
             if (shouldChangeDisplay) {
                 for (unsigned int i = 0; i < 4; i++)
                 {
 					bool    needFrameChange = GetTimeInMillis() > currentImages[i].nextFrameTime;
                     if (needFrameChange)
                     {
-//                        fprintf(stderr, "Select next frame for file %d\n", i);
                         currentImages[i].currentFrameID = (currentImages[i].currentFrameID + 1) % currentImages[i].frames.size();
                     }
                     
@@ -209,7 +207,6 @@ void        displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
                         if (delay_time_us <= 0) {
                             delay_time_us = 100 * 1000;  // 1/10sec
                         }
-  //                      fprintf(stderr, "delay_time_us: %.3lld\n", delay_time_us);
                         currentImages[i].nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
                         
                     }
