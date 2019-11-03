@@ -172,7 +172,8 @@ void        displayLoop(RGBMatrix *matrix)
     int        frameCount = 0;
 	unsigned int		nextCollectionIdx = 0;
 	int		currentCollectionIdx = -1;
-    
+    std::vector<LoadedFile>	currentImages;
+		
     while (!interrupt_received)
     {
         tmillis_t    frame_start = GetTimeInMillis();
@@ -198,14 +199,11 @@ void        displayLoop(RGBMatrix *matrix)
 				{
 					nextCollectionIdx = 0;
 				}
-                printf("Next collection idx: %d\n", nextCollectionIdx);
+				currentImages = gl_collections[currentCollectionIdx].loadedFiles;
             }
         }
         
         if (currentCollectionIdx >= 0) {
-            
-			std::vector<LoadedFile>	currentImages = gl_collections[currentCollectionIdx].loadedFiles;
-			
             bool        shouldChangeDisplay = false;
             
             for (unsigned int i = 0; i < currentImages.size(); i++)
@@ -216,6 +214,7 @@ void        displayLoop(RGBMatrix *matrix)
                     break;
                 }
             }
+
             if (shouldChangeDisplay) {
                 for (unsigned int i = 0; i < currentImages.size(); i++)
                 {
