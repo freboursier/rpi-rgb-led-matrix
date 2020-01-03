@@ -174,7 +174,6 @@ void    drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas)
     }
 }
 
-//void        displayLoop(std::vector<const char *> filenames, RGBMatrix *matrix)
 void        displayLoop(RGBMatrix *matrix)
 
 {
@@ -247,7 +246,7 @@ void        displayLoop(RGBMatrix *matrix)
                   currentImages[i].nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
                         
                 }
-              fprintf(stderr, "blitz %s\n", currentImages[i].filename);
+              //              fprintf(stderr, "blitz %s\n", currentImages[i].filename);
               blitzFrameInCanvas(matrix, offscreen_canvas, img, i, gl_collections[currentCollectionIdx].screenMode);
             }
           if (gl_collections[currentCollectionIdx].screenMode == Cross)
