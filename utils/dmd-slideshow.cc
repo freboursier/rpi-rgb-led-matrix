@@ -48,7 +48,7 @@
 #include    "dmd-slideshow-utils.hh"
 
 //#define    MEGA_VERBOSE
-
+#define	DEBUG	0
 #define        IMAGE_DISPLAY_DURATION    5
 #define        FRAME_PER_SECOND        30
 
@@ -61,10 +61,6 @@ using rgb_matrix::Canvas;
 using rgb_matrix::FrameCanvas;
 using rgb_matrix::RGBMatrix;
 using rgb_matrix::StreamReader;
-
-
-bool    initialLoadDone = false;
-
 
 
 void  *LoadFile(void *inParam)
@@ -103,8 +99,7 @@ void  *LoadFile(void *inParam)
         (collection->loadedFiles)[i % collection->loadedFiles.size()].is_multi_frame = frames.size() > 1;
         (collection->loadedFiles)[i % collection->loadedFiles.size()].frameCount = frames.size();
         (collection->loadedFiles)[i % collection->loadedFiles.size()].nextFrameTime = GetTimeInMillis();
-        // Put together the animation from single frames. GIFs can have nasty
-        // disposal modes, but they are handled nicely by coalesceImages()
+
         if (frames.size() > 1) {
             Magick::coalesceImages(&((collection->loadedFiles)[i % collection->loadedFiles.size()].frames), frames.begin(), frames.end());
         } else {
@@ -115,11 +110,15 @@ void  *LoadFile(void *inParam)
     pthread_exit((void *)0);
 }
 
-void    blitzFrameInCanvas(FrameCanvas *offscreen_canvas, const Magick::Image &img, unsigned int position)
+void    blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, Magick::Image &img, unsigned int position, ScreenMode	screenMode)
 {
-    int    x_offset = position % 2 == 0 ? 0 : 128;
+	if (screenMode == FullScreen)
+	{
+	  img.scale(Magick::Geometry(matrix->width(), matrix->height()));
+  	}
+    int    x_offset = position % 2 == 0 ? 0 : matrix->width() / 2;
     
-    int    y_offset = position <= 1 ? 0 : 32;
+    int    y_offset = position <= 1 ? 0 : matrix->height() / 2;
     for (size_t y = 0; y < img.rows(); ++y) {
         for (size_t x = 0; x < img.columns(); ++x) {
             const Magick::Color &c = img.pixelColor(x, y);
@@ -133,27 +132,27 @@ void    blitzFrameInCanvas(FrameCanvas *offscreen_canvas, const Magick::Image &i
     }
 }
 
-void    drawCross(FrameCanvas *offscreen_canvas)
+void    drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas)
 {
-    for (int i = 0; i < 256; i++)
+    for (int i = 0; i < matrix->width(); i++)
     {
-        offscreen_canvas->SetPixel(i, 31,
+        offscreen_canvas->SetPixel(i, matrix->height() / 2 - 1,
                                    ScaleQuantumToChar(0),
                                    ScaleQuantumToChar(0),
                                    ScaleQuantumToChar(0));
-        offscreen_canvas->SetPixel(i, 32,
+        offscreen_canvas->SetPixel(i, matrix->height(),
                                    ScaleQuantumToChar(0),
                                    ScaleQuantumToChar(0),
                                    ScaleQuantumToChar(0));
         
     }
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < matrix->height(); i++)
     {
-        offscreen_canvas->SetPixel(128, i,
+        offscreen_canvas->SetPixel(matrix->width() / 2 - 1, i,
                                    ScaleQuantumToChar(0),
                                    ScaleQuantumToChar(0),
                                    ScaleQuantumToChar(0));
-        offscreen_canvas->SetPixel(128, i,
+        offscreen_canvas->SetPixel(matrix->width() / 2, i,
                                    ScaleQuantumToChar(0),
                                    ScaleQuantumToChar(0),
                                    ScaleQuantumToChar(0));
@@ -188,17 +187,11 @@ void        displayLoop(RGBMatrix *matrix)
         
         if (workerThread) {
             void    *threadRetval = NULL;
-            int joinResult = pthread_tryjoin_np(workerThread, &threadRetval);
-            if (joinResult == 0) {
-                printf("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
-                
+            if (0 == pthread_tryjoin_np(workerThread, &threadRetval)) {
+                debug_print("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
                 workerThread = 0;
 				currentCollectionIdx = nextCollectionIdx;
-				nextCollectionIdx++;
-				if (nextCollectionIdx == gl_collections.size())
-				{
-					nextCollectionIdx = 0;
-				}
+				nextCollectionIdx = nextCollectionIdx + 1 %  gl_collections.size();
 				currentImages = gl_collections[currentCollectionIdx].loadedFiles;
             }
         }
@@ -224,7 +217,7 @@ void        displayLoop(RGBMatrix *matrix)
                         currentImages[i].currentFrameID = (currentImages[i].currentFrameID + 1) % currentImages[i].frames.size();
                     }
                     
-                    const Magick::Image &img = currentImages[i].frames[currentImages[i].currentFrameID];
+                     Magick::Image &img = currentImages[i].frames[currentImages[i].currentFrameID];
                     if (needFrameChange)
                     {
                         int64_t delay_time_us;
@@ -240,10 +233,13 @@ void        displayLoop(RGBMatrix *matrix)
                         currentImages[i].nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
                         
                     }
-                    
-                    blitzFrameInCanvas(offscreen_canvas, img, i);
+                    fprintf(stderr, "blitz %s", currentImages[i].filename);
+                    blitzFrameInCanvas(matrix, offscreen_canvas, img, i, gl_collections[currentCollectionIdx].screenMode);
                 }
-                drawCross(offscreen_canvas);
+				if (gl_collections[currentCollectionIdx].screenMode == Cross)
+				{
+					drawCross(matrix, offscreen_canvas);
+				}
                 offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
             }
         }
@@ -345,10 +341,8 @@ int main(int argc, char *argv[]) {
     }
     errno = 0;
     
-    
     while (1)
     {
-        
         struct dirent *entry = readdir(gifDir);
         if (entry == NULL && errno == 0)
         {
@@ -371,11 +365,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, ">%s<\n", gl_filenames[i]);
     }
 #endif
-	
-	for (unsigned int z = 0; z < gl_collections.size(); z++)
-	{
-		fprintf(stderr, "collections %s\n", gl_collections[z].regex);
-	}
+
 	
 	for (unsigned int i = 0; i < gl_collections.size(); i++)
 	{	
@@ -416,8 +406,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Fatal: Failed to create matrix\n");
         return 1;
     }
-    
-    
     
     printf("Size: %dx%d. Hardware gpio mapping: %s\n",
            matrix->width(), matrix->height(), matrix_options.hardware_mapping);
