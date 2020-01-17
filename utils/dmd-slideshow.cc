@@ -204,7 +204,7 @@ void        displayLoop(RGBMatrix *matrix)
           //          debug_print("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
           workerThread = 0;
           currentCollectionIdx = nextCollectionIdx;
-          nextCollectionIdx = nextCollectionIdx + 1 %  gl_collections.size();
+          nextCollectionIdx = (nextCollectionIdx + 1) %  gl_collections.size();
           currentImages = gl_collections[currentCollectionIdx].loadedFiles;
         }
       }
