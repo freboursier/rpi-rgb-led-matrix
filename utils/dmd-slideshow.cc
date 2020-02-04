@@ -1,4 +1,4 @@
-// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil; -*-
+ // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil; -*-
 // Copyright (C) 2015 Henner Zeller <h.zeller@acm.org>
 //
 // This program is free software; you can redistribute it and/or modify
@@ -53,7 +53,7 @@
 #define        FRAME_PER_SECOND        30
 
 std::vector<const char *> gl_filenames;
-std::vector<FileCollection>	gl_collections;
+std::vector<FileCollection *>	gl_collections;
 
 
 using rgb_matrix::GPIO;
@@ -65,20 +65,11 @@ using rgb_matrix::StreamReader;
 
 void  *LoadFile(void *inParam)
 {
-  //   fprintf(stderr, "Start worker thread\n");
+	   fprintf(stderr, "Start worker thread %p\n", inParam);
   setThreadPriority(3, (1<<2));
 
   FileCollection	*collection = (FileCollection	*)inParam;
-    
-  if (collection->screenMode == FullScreen)
-    {
-      collection->loadedFiles = std::vector<LoadedFile>(1);
-    }
-  else
-    {
-      collection->loadedFiles = std::vector<LoadedFile>(4);
-    }
-	
+
   for (unsigned int i = 0; i < collection->loadedFiles.size(); i++)
     {
       std::vector<Magick::Image> frames;
@@ -87,16 +78,15 @@ void  *LoadFile(void *inParam)
       while (true)
         {
           int    randCount = rand() % collection->filePaths.size();
-          //      fprintf(stderr, "Available image count: %d, bet on %d\n", gl_filenames.size(), randCount);
           const char    *imagePath = collection->filePaths[randCount];
           try {
             fprintf(stderr, "Attempt to load >%s<\n", imagePath);
             readImages(&frames, imagePath);
 
-                  (collection->loadedFiles)[i % collection->loadedFiles.size()].filename = imagePath;
-      (collection->loadedFiles)[i % collection->loadedFiles.size()].is_multi_frame = frames.size() > 1;
-      (collection->loadedFiles)[i % collection->loadedFiles.size()].frameCount = frames.size();
-      (collection->loadedFiles)[i % collection->loadedFiles.size()].nextFrameTime = GetTimeInMillis();
+			(collection->loadedFiles)[i % collection->loadedFiles.size()].filename = imagePath;
+			(collection->loadedFiles)[i % collection->loadedFiles.size()].is_multi_frame = frames.size() > 1;
+			(collection->loadedFiles)[i % collection->loadedFiles.size()].frameCount = frames.size();
+			(collection->loadedFiles)[i % collection->loadedFiles.size()].nextFrameTime = GetTimeInMillis();
 
 
             break;
@@ -150,27 +140,14 @@ void    drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas)
 {
   for (int i = 0; i < matrix->width(); i++)
     {
-      offscreen_canvas->SetPixel(i, matrix->height() / 2 - 1,
-                                 ScaleQuantumToChar(0),
-                                 ScaleQuantumToChar(0),
-                                 ScaleQuantumToChar(0));
-      offscreen_canvas->SetPixel(i, matrix->height(),
-                                 ScaleQuantumToChar(0),
-                                 ScaleQuantumToChar(0),
-                                 ScaleQuantumToChar(0));
+      offscreen_canvas->SetPixel(i, matrix->height() / 2 - 1, 0, 0, 0);
+      offscreen_canvas->SetPixel(i, matrix->height() / 2, 0, 0, 0);
         
     }
   for (int i = 0; i < matrix->height(); i++)
     {
-      offscreen_canvas->SetPixel(matrix->width() / 2 - 1, i,
-                                 ScaleQuantumToChar(0),
-                                 ScaleQuantumToChar(0),
-                                 ScaleQuantumToChar(0));
-      offscreen_canvas->SetPixel(matrix->width() / 2, i,
-                                 ScaleQuantumToChar(0),
-                                 ScaleQuantumToChar(0),
-                                 ScaleQuantumToChar(0));
-        
+      offscreen_canvas->SetPixel(matrix->width() / 2 - 1, i, 0, 0, 0);
+      offscreen_canvas->SetPixel(matrix->width() / 2, i, 0, 0, 0);
     }
 }
 
@@ -184,7 +161,7 @@ void        displayLoop(RGBMatrix *matrix)
   int        frameCount = 0;
   unsigned int		nextCollectionIdx = 0;
   int		currentCollectionIdx = -1;
-  std::vector<LoadedFile>	currentImages;
+  std::vector<LoadedFile>	*currentImages;
 		
   while (!interrupt_received)
     {
@@ -192,7 +169,7 @@ void        displayLoop(RGBMatrix *matrix)
         
       if (frameCount % (FRAME_PER_SECOND * IMAGE_DISPLAY_DURATION) == 0 && workerThread == 0)
         {
-          int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)(&(gl_collections[nextCollectionIdx])));
+			 int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)gl_collections[nextCollectionIdx]);
           if (ret) {
             printf("Failed to create worker thread\n");
           }
@@ -205,16 +182,16 @@ void        displayLoop(RGBMatrix *matrix)
           workerThread = 0;
           currentCollectionIdx = nextCollectionIdx;
           nextCollectionIdx = (nextCollectionIdx + 1) %  gl_collections.size();
-          currentImages = gl_collections[currentCollectionIdx].loadedFiles;
+          currentImages = &(gl_collections[currentCollectionIdx]->loadedFiles);
         }
       }
         
       if (currentCollectionIdx >= 0) {
         bool        shouldChangeDisplay = false;
             
-        for (unsigned int i = 0; i < currentImages.size(); i++)
+        for (unsigned int i = 0; i < currentImages->size(); i++)
           {
-            bool    needFrameChange = GetTimeInMillis() > currentImages[i].nextFrameTime;
+            bool    needFrameChange = GetTimeInMillis() > (*currentImages)[i].nextFrameTime;
             if (needFrameChange) {
               shouldChangeDisplay = true;
               break;
@@ -222,20 +199,20 @@ void        displayLoop(RGBMatrix *matrix)
           }
 
         if (shouldChangeDisplay) {
-          for (unsigned int i = 0; i < currentImages.size(); i++)
+          for (unsigned int i = 0; i < currentImages->size(); i++)
             {
-              bool    needFrameChange = GetTimeInMillis() > currentImages[i].nextFrameTime;
+              bool    needFrameChange = GetTimeInMillis() > (*currentImages)[i].nextFrameTime;
               if (needFrameChange)
                 {
-                  currentImages[i].currentFrameID = (currentImages[i].currentFrameID + 1) % currentImages[i].frames.size();
+                  (*currentImages)[i].currentFrameID = ((*currentImages)[i].currentFrameID + 1) % (*currentImages)[i].frames.size();
                 }
                     
-              Magick::Image &img = currentImages[i].frames[currentImages[i].currentFrameID];
+              Magick::Image &img = (*currentImages)[i].frames[(*currentImages)[i].currentFrameID];
               if (needFrameChange)
                 {
                   int64_t delay_time_us;
                         
-                  if (currentImages[i].is_multi_frame) {
+                  if ((*currentImages)[i].is_multi_frame) {
                     delay_time_us = img.animationDelay() * 1000; // unit in 1/100s
                   } else {
                     delay_time_us = 5 * 1000;  // single image.
@@ -243,14 +220,14 @@ void        displayLoop(RGBMatrix *matrix)
                   if (delay_time_us <= 0) {
                     delay_time_us = 100 * 1000;  // 1/10sec
                   }
-                  currentImages[i].nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
+                  (*currentImages)[i].nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
                         
                 }
               //              fprintf(stderr, "blitz %s\n", currentImages[i].filename);
-              blitzFrameInCanvas(matrix, offscreen_canvas, img, i, gl_collections[currentCollectionIdx].screenMode);
+              blitzFrameInCanvas(matrix, offscreen_canvas, img, i, gl_collections[currentCollectionIdx]->screenMode);
             }
-          if (gl_collections[currentCollectionIdx].screenMode == Cross)
-            {
+			if (gl_collections[currentCollectionIdx]->screenMode == Cross)
+			{
               drawCross(matrix, offscreen_canvas);
             }
           offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
@@ -320,19 +297,21 @@ int main(int argc, char *argv[]) {
       break;
     case 'c':
       {
-        FileCollection	newCollection;
-        newCollection.screenMode = Cross;
-        newCollection.displayDuration = displayDuration;
-        newCollection.regex = optarg;
+        FileCollection	*newCollection = new FileCollection();
+        newCollection->screenMode = Cross;
+        newCollection->displayDuration = displayDuration;
+        newCollection->regex = optarg;
+				newCollection->loadedFiles = std::vector<LoadedFile>(4);
         gl_collections.push_back(newCollection);
       }
       break;
     case 'f':
       {
-        FileCollection	newCollection;
-        newCollection.screenMode = FullScreen;
-        newCollection.displayDuration = displayDuration;
-        newCollection.regex = optarg;
+          FileCollection	*newCollection = new FileCollection();
+        newCollection->screenMode = FullScreen;
+        newCollection->displayDuration = displayDuration;
+        newCollection->regex = optarg;
+				newCollection->loadedFiles = std::vector<LoadedFile>(1);
         gl_collections.push_back(newCollection);
       }
       break;
@@ -382,11 +361,11 @@ int main(int argc, char *argv[]) {
 	
   for (unsigned int i = 0; i < gl_collections.size(); i++)
     {	
-      fprintf(stderr, "Fill collection %s\n", gl_collections[i].regex);
+      fprintf(stderr, "Fill collection %s\n", gl_collections[i]->regex);
 		
       regex_t regex;
 
-      int reti = regcomp(&regex, gl_collections[i].regex, REG_ICASE);
+      int reti = regcomp(&regex, gl_collections[i]->regex, REG_ICASE);
       if (reti) {
         fprintf(stderr, "Could not compile regex\n");
       }
@@ -396,20 +375,20 @@ int main(int argc, char *argv[]) {
           reti = regexec(&regex, gl_filenames[j], 0, NULL, 0);
           if (!reti) {
 #ifdef    MEGA_VERBOSE
-            fprintf(stderr,"Match %s => %s\n", gl_collections[i].regex, gl_filenames[j]);
+            fprintf(stderr,"Match %s => %s\n", gl_collections[i]->regex, gl_filenames[j]);
 #endif
-            gl_collections[i].filePaths.push_back(gl_filenames[j]);
+            gl_collections[i]->filePaths.push_back(gl_filenames[j]);
 			   
           }
         }
-      fprintf(stderr, "\t%d pictures\n", gl_collections[i].filePaths.size());
+      fprintf(stderr, "\t%d pictures\n", gl_collections[i]->filePaths.size());
       regfree(&regex);
 		
     }
 	
   for (unsigned int z = 0; z < gl_collections.size(); z++)
     {
-      fprintf(stderr, "Collection %d %s => %d images\n", z,  gl_collections[z].regex, gl_collections[z].filePaths.size());
+      fprintf(stderr, "Collection %d %s => %d images\n", z,  gl_collections[z]->regex, gl_collections[z]->filePaths.size());
     }
 
   runtime_opt.do_gpio_init = (stream_output == NULL);
