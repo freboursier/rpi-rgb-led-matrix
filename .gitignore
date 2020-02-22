@@ -5,3 +5,5 @@
 *.so
 
 dmd-slideshow
+**/._*
+
