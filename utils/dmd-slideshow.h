@@ -43,6 +43,12 @@ struct	FileCollection {
 	std::vector<LoadedFile> loadedFiles;
 };
 
+struct Sequence {
+    std::vector<FileCollection *> collections;
+    const char *name;
+    int     displayTime; // Display timee in seconds
+};
+
 volatile bool interrupt_received = false;
 static void InterruptHandler(int signo) {
     interrupt_received = true;

@@ -60,7 +60,7 @@
 #define INFO_MESSAGE_LENGTH   30
 
 std::vector<const char *> gl_filenames;
-std::vector<FileCollection *> gl_collections;
+std::vector<Sequence *> gl_sequences;
 
 using rgb_matrix::Canvas;
 using rgb_matrix::FrameCanvas;
@@ -299,7 +299,8 @@ void displayLoop(RGBMatrix *matrix)
   pthread_t workerThread = 0;
   pthread_t remoteControlThread = 0;
 
-  fprintf(stderr, "%d collections available\n", gl_collections.size());
+  std::vector<FileCollection *> collections = gl_sequences.front()->collections;
+  fprintf(stderr, "%d collections available\n", collections.size());
 
   int frameCount = 0;
   unsigned int nextCollectionIdx = 0;
@@ -325,7 +326,7 @@ void displayLoop(RGBMatrix *matrix)
 
     if (frameCount % (FRAME_PER_SECOND * IMAGE_DISPLAY_DURATION) == 0 && workerThread == 0)
     {
-      int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)gl_collections[nextCollectionIdx]);
+      int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)collections[nextCollectionIdx]);
       if (ret)
       {
         printf("Failed to create worker thread\n");
@@ -340,8 +341,8 @@ void displayLoop(RGBMatrix *matrix)
         //          debug_print("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
         workerThread = 0;
         currentCollectionIdx = nextCollectionIdx;
-        nextCollectionIdx = (nextCollectionIdx + 1) % gl_collections.size();
-        currentImages = &(gl_collections[currentCollectionIdx]->loadedFiles);
+        nextCollectionIdx = (nextCollectionIdx + 1) % collections.size();
+        currentImages = &(collections[currentCollectionIdx]->loadedFiles);
       }
     }
 
@@ -389,16 +390,15 @@ void displayLoop(RGBMatrix *matrix)
             (*currentImages)[i].nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
           }
           //              fprintf(stderr, "blitz %s\n", currentImages[i].filename);
-          blitzFrameInCanvas(matrix, offscreen_canvas, img, i, gl_collections[currentCollectionIdx]->screenMode);
+          blitzFrameInCanvas(matrix, offscreen_canvas, img, i, collections[currentCollectionIdx]->screenMode);
         }
-        if (gl_collections[currentCollectionIdx]->screenMode == Cross)
+        if (collections[currentCollectionIdx]->screenMode == Cross)
         {
           drawCross(matrix, offscreen_canvas);
         }
 
          if (time(0) < gl_infotimeout)
       {
-//        fprintf(stderr, "gl %s\n", gl_infoMessage);
         rgb_matrix::Color blackColor = {.r = 0, .g = 0, .b = 0};
 
         DrawText(offscreen_canvas, statusFont,
@@ -460,8 +460,8 @@ static bool LoadImageAndScale(const char *filename,
 int main(int argc, char *argv[])
 {
   srand(time(0));
-  snprintf(gl_infoMessage, INFO_MESSAGE_LENGTH, "XX Luminosité %d%%", 42);
-scheduleInfoMessage();
+//   snprintf(gl_infoMessage, INFO_MESSAGE_LENGTH, "XX Luminosité %d%%", 42);
+// scheduleInfoMessage();
   Magick::InitializeMagick(*argv);
   RGBMatrix::Options matrix_options;
   rgb_matrix::RuntimeOptions runtime_opt;
@@ -474,7 +474,7 @@ scheduleInfoMessage();
   const char *stream_output = NULL;
   char *gifDirectory = NULL;
   int opt;
-  while ((opt = getopt(argc, argv, "w:t:l:c:P:hO:d:c:f:")) != -1)
+  while ((opt = getopt(argc, argv, "w:t:l:c:P:hO:d:c:f:s:")) != -1)
   {
     switch (opt)
     {
@@ -491,7 +491,7 @@ scheduleInfoMessage();
       newCollection->displayDuration = displayDuration;
       newCollection->regex = optarg;
       newCollection->loadedFiles = std::vector<LoadedFile>(4);
-      gl_collections.push_back(newCollection);
+      gl_sequences.back()->collections.push_back(newCollection);
     }
     break;
     case 'f':
@@ -501,11 +501,18 @@ scheduleInfoMessage();
       newCollection->displayDuration = displayDuration;
       newCollection->regex = optarg;
       newCollection->loadedFiles = std::vector<LoadedFile>(1);
-      gl_collections.push_back(newCollection);
+      gl_sequences.back()->collections.push_back(newCollection);
     }
     break;
     case 'P':
       matrix_options.parallel = atoi(optarg);
+      break;
+      case 's':
+      {
+        Sequence *newSequence = new Sequence();
+        newSequence->name = optarg;
+        gl_sequences.push_back(newSequence);
+      }
       break;
     case 'h':
     default:
@@ -547,13 +554,15 @@ scheduleInfoMessage();
   }
 #endif
 
-  for (unsigned int i = 0; i < gl_collections.size(); i++)
+for (unsigned short k = 0; k < gl_sequences.size(); k++)
+{
+  for (unsigned int i = 0; i < gl_sequences[k]->collections.size(); i++)
   {
-    fprintf(stderr, "Fill collection %s\n", gl_collections[i]->regex);
+    fprintf(stderr, "Fill collection %s\n", gl_sequences[k]->collections[i]->regex);
 
     regex_t regex;
 
-    int reti = regcomp(&regex, gl_collections[i]->regex, REG_ICASE);
+    int reti = regcomp(&regex, gl_sequences[k]->collections[i]->regex, REG_ICASE);
     if (reti)
     {
       fprintf(stderr, "Could not compile regex\n");
@@ -565,19 +574,27 @@ scheduleInfoMessage();
       if (!reti)
       {
 #ifdef MEGA_VERBOSE
-        fprintf(stderr, "Match %s => %s\n", gl_collections[i]->regex, gl_filenames[j]);
+        fprintf(stderr, "Match %s => %s\n", gl_sequences[k]->collections[i]->regex, gl_filenames[j]);
 #endif
-        gl_collections[i]->filePaths.push_back(gl_filenames[j]);
+        gl_sequences[k]->collections[i]->filePaths.push_back(gl_filenames[j]);
       }
     }
-    fprintf(stderr, "\t%d pictures\n", gl_collections[i]->filePaths.size());
+    fprintf(stderr, "\t%d pictures\n", gl_sequences[k]->collections[i]->filePaths.size());
     regfree(&regex);
   }
+  
+}
 
-  for (unsigned int z = 0; z < gl_collections.size(); z++)
+
+for (unsigned short k = 0; k < gl_sequences.size(); k++)
+{
+      fprintf(stderr, "Sequence %s / %d collections\n", gl_sequences[k]->name, gl_sequences[k]->collections.size());
+
+  for (unsigned int z = 0; z < gl_sequences[k]->collections.size(); z++)
   {
-    fprintf(stderr, "Collection %d %s => %d images\n", z, gl_collections[z]->regex, gl_collections[z]->filePaths.size());
+    fprintf(stderr, "\tCollection %d %s => %d images\n", z, gl_sequences[k]->collections[z]->regex, gl_sequences[k]->collections[z]->filePaths.size());
   }
+}
 
   runtime_opt.do_gpio_init = (stream_output == NULL);
   matrix = CreateMatrixFromOptions(matrix_options, runtime_opt);
