@@ -22,6 +22,8 @@
 #include "led-matrix.h"
 #include "pixel-mapper.h"
 #include "content-streamer.h"
+#include "graphics.h"
+
 #include <pthread.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -65,6 +67,7 @@ using rgb_matrix::FrameCanvas;
 using rgb_matrix::GPIO;
 using rgb_matrix::RGBMatrix;
 using rgb_matrix::StreamReader;
+using rgb_matrix::Font;
 
 RGBMatrix *matrix;
 char  gl_infoMessage[INFO_MESSAGE_LENGTH];
@@ -197,7 +200,6 @@ void *MonitorIRRemote(void *inParam)
 
 void *LoadFile(void *inParam)
 {
-  //	   fprintf(stderr, "Start worker thread %p\n", inParam);
   setThreadPriority(3, (1 << 2));
 
   FileCollection *collection = (FileCollection *)inParam;
@@ -310,12 +312,15 @@ void displayLoop(RGBMatrix *matrix)
     printf("Failed to create Remote control thread\n");
   }
 
+  Font statusFont;
+  if (!statusFont.LoadFont("../fonts/10x20.bdf")) {
+    fprintf(stderr, "Couldn't load font \n");
+    exit(1);
+  }
+
   while (!interrupt_received)
   {
-      if (time(0) > gl_infotimeout)
-      {
-        fprintf(stderr, "gl %s\n", gl_infoMessage);
-      }
+
     tmillis_t frame_start = GetTimeInMillis();
 
     if (frameCount % (FRAME_PER_SECOND * IMAGE_DISPLAY_DURATION) == 0 && workerThread == 0)
@@ -344,7 +349,7 @@ void displayLoop(RGBMatrix *matrix)
     {
       bool shouldChangeDisplay = false;
 
-      for (unsigned int i = 0; i < currentImages->size(); i++)
+      for (unsigned short i = 0; i < currentImages->size(); i++)
       {
         bool needFrameChange = GetTimeInMillis() > (*currentImages)[i].nextFrameTime;
         if (needFrameChange)
@@ -356,7 +361,7 @@ void displayLoop(RGBMatrix *matrix)
 
       if (shouldChangeDisplay)
       {
-        for (unsigned int i = 0; i < currentImages->size(); i++)
+        for (unsigned short i = 0; i < currentImages->size(); i++)
         {
           bool needFrameChange = GetTimeInMillis() > (*currentImages)[i].nextFrameTime;
           if (needFrameChange)
@@ -390,6 +395,19 @@ void displayLoop(RGBMatrix *matrix)
         {
           drawCross(matrix, offscreen_canvas);
         }
+
+         if (time(0) < gl_infotimeout)
+      {
+//        fprintf(stderr, "gl %s\n", gl_infoMessage);
+        rgb_matrix::Color blackColor = {.r = 0, .g = 0, .b = 0};
+
+        DrawText(offscreen_canvas, statusFont,
+                                  0, 0 + statusFont.baseline(),
+                                  {.r = 255, .g = 255, .b = 255}, &blackColor,
+                                  gl_infoMessage, 0);
+
+      }
+
         offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
       }
     }
@@ -442,7 +460,7 @@ static bool LoadImageAndScale(const char *filename,
 int main(int argc, char *argv[])
 {
   srand(time(0));
-  snprintf(gl_infoMessage, INFO_MESSAGE_LENGTH, "Luminosité %d%%", 42);
+  snprintf(gl_infoMessage, INFO_MESSAGE_LENGTH, "XX Luminosité %d%%", 42);
 scheduleInfoMessage();
   Magick::InitializeMagick(*argv);
   RGBMatrix::Options matrix_options;
