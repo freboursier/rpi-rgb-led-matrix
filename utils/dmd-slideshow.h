@@ -8,15 +8,15 @@ typedef int64_t tmillis_t;
 
 static const tmillis_t distant_future = (1LL<<40); // that is a while.
 
-struct ImageParams {
-    ImageParams() : anim_duration_ms(distant_future), wait_ms(1500),
-    anim_delay_ms(-1), loops(-1), vsync_multiple(1) {}
-    tmillis_t anim_duration_ms;  // If this is an animation, duration to show.
-    tmillis_t wait_ms;           // Regular image: duration to show.
-    tmillis_t anim_delay_ms;     // Animation delay override.
-    int loops;
-    int vsync_multiple;
-};
+// struct ImageParams {
+//     ImageParams() : anim_duration_ms(distant_future), wait_ms(1500),
+//     anim_delay_ms(-1), loops(-1), vsync_multiple(1) {}
+//     tmillis_t anim_duration_ms;  // If this is an animation, duration to show.
+//     tmillis_t wait_ms;           // Regular image: duration to show.
+//     tmillis_t anim_delay_ms;     // Animation delay override.
+//     int loops;
+//     int vsync_multiple;
+// };
 
 struct    LoadedFile {
     LoadedFile(): is_multi_frame(0), currentFrameID(0), nextFrameTime(-distant_future){};
@@ -39,8 +39,10 @@ struct	FileCollection {
 	const char *regex;
 	ScreenMode	screenMode;
 	unsigned 	int	displayDuration;
+    tmillis_t   displayStartTime; // When did we start to show this collection ?
 	std::vector<const char *>filePaths;
-	std::vector<LoadedFile> loadedFiles;
+	std::vector<LoadedFile *> loadedFiles;
+    unsigned short visibleImages; // Number of files show simultaneously
 };
 
 struct Sequence {

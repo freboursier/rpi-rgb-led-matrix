@@ -53,8 +53,9 @@
 #define MAX(a, b) (((a) < (b)) ? (b) : (a))
 //#define    MEGA_VERBOSE
 
+
 #define BRIGHTNESS_INCREMENT  5
-#define DEBUG 0
+#define DEBUG 1
 #define IMAGE_DISPLAY_DURATION 5
 #define FRAME_PER_SECOND 30
 #define INFO_MESSAGE_LENGTH   30
@@ -204,7 +205,8 @@ void *LoadFile(void *inParam)
 
   FileCollection *collection = (FileCollection *)inParam;
 
-  for (unsigned int i = 0; i < collection->loadedFiles.size(); i++)
+//  for (unsigned int i = 0; i < collection->visibleImages; i++)
+while (collection->loadedFiles.size() < collection->visibleImages * 2)
   {
     std::vector<Magick::Image> frames;
     int count = 0;
@@ -215,13 +217,19 @@ void *LoadFile(void *inParam)
       const char *imagePath = collection->filePaths[randCount];
       try
       {
-        //            fprintf(stderr, "Attempt to load >%s<\n", imagePath);
+        fprintf(stderr, "Attempt to load >%s<\n", imagePath);
         readImages(&frames, imagePath);
 
-        (collection->loadedFiles)[i % collection->loadedFiles.size()].filename = imagePath;
-        (collection->loadedFiles)[i % collection->loadedFiles.size()].is_multi_frame = frames.size() > 1;
-        (collection->loadedFiles)[i % collection->loadedFiles.size()].frameCount = frames.size();
-        (collection->loadedFiles)[i % collection->loadedFiles.size()].nextFrameTime = GetTimeInMillis();
+        LoadedFile  *loadedFile = new LoadedFile();
+
+
+
+        loadedFile->filename = imagePath;
+        loadedFile->is_multi_frame = frames.size() > 1;
+        loadedFile->frameCount = frames.size();
+        loadedFile->currentFrameID = -1;
+        loadedFile->nextFrameTime = GetTimeInMillis();
+        collection->loadedFiles.push_back(loadedFile);
 
         break;
       }
@@ -243,7 +251,7 @@ void *LoadFile(void *inParam)
     }
     if (frames.size() > 1)
     {
-      Magick::coalesceImages(&((collection->loadedFiles)[i % collection->loadedFiles.size()].frames), frames.begin(), frames.end());
+      Magick::coalesceImages(&(collection->loadedFiles.back()->frames), frames.begin(), frames.end());
     }
     else
     {
@@ -298,14 +306,14 @@ void displayLoop(RGBMatrix *matrix)
   FrameCanvas *offscreen_canvas = matrix->CreateFrameCanvas();
   pthread_t workerThread = 0;
   pthread_t remoteControlThread = 0;
-
+  bool  shouldChangeCollection = false;
   std::vector<FileCollection *> collections = gl_sequences.front()->collections;
   fprintf(stderr, "%d collections available\n", collections.size());
 
   int frameCount = 0;
   unsigned int nextCollectionIdx = 0;
   int currentCollectionIdx = -1;
-  std::vector<LoadedFile> *currentImages;
+  std::vector<LoadedFile *> *currentImages;
 
   int ret = pthread_create(&remoteControlThread, NULL, MonitorIRRemote, NULL);
   if (ret)
@@ -324,8 +332,9 @@ void displayLoop(RGBMatrix *matrix)
 
     tmillis_t frame_start = GetTimeInMillis();
 
-    if (frameCount % (FRAME_PER_SECOND * IMAGE_DISPLAY_DURATION) == 0 && workerThread == 0)
+  if (workerThread == 0 && collections[nextCollectionIdx]->loadedFiles.size() < collections[nextCollectionIdx]->visibleImages * 2)
     {
+      fprintf(stderr, " => %d loaded files in collection %s, need %d\n", collections[nextCollectionIdx]->loadedFiles.size(), collections[nextCollectionIdx]->regex, collections[nextCollectionIdx]->visibleImages);
       int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)collections[nextCollectionIdx]);
       if (ret)
       {
@@ -338,21 +347,35 @@ void displayLoop(RGBMatrix *matrix)
       void *threadRetval = NULL;
       if (0 == pthread_tryjoin_np(workerThread, &threadRetval))
       {
-        //          debug_print("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
+        debug_print("\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
         workerThread = 0;
-        currentCollectionIdx = nextCollectionIdx;
-        nextCollectionIdx = (nextCollectionIdx + 1) % collections.size();
-        currentImages = &(collections[currentCollectionIdx]->loadedFiles);
+        if (currentCollectionIdx == -1) {
+          currentCollectionIdx = nextCollectionIdx;
+          nextCollectionIdx = (nextCollectionIdx + 1) % collections.size();
+          currentImages = &(collections[currentCollectionIdx]->loadedFiles);
+          collections[currentCollectionIdx]->displayStartTime = GetTimeInMillis();
+        }
       }
     }
+    if (shouldChangeCollection == true && collections[nextCollectionIdx]->loadedFiles.size() >= collections[nextCollectionIdx]->visibleImages * 2)
+    {
+       debug_print("\033[0;31mClear loaded files, move to next %d that contains %d images\033\n", nextCollectionIdx, collections[nextCollectionIdx]->loadedFiles.size());
+  collections[currentCollectionIdx]->loadedFiles.erase(collections[currentCollectionIdx]->loadedFiles.begin(), collections[currentCollectionIdx]->loadedFiles.begin() + collections[currentCollectionIdx]->visibleImages);
+       currentCollectionIdx = nextCollectionIdx;
+          nextCollectionIdx = (nextCollectionIdx + 1) % collections.size();
+          currentImages = &(collections[currentCollectionIdx]->loadedFiles);
+                    collections[currentCollectionIdx]->displayStartTime = GetTimeInMillis();
 
+    }
+
+    shouldChangeCollection = false;
     if (currentCollectionIdx >= 0)
     {
       bool shouldChangeDisplay = false;
 
-      for (unsigned short i = 0; i < currentImages->size(); i++)
+      for (unsigned short i = 0; i < collections[currentCollectionIdx]->visibleImages; i++)
       {
-        bool needFrameChange = GetTimeInMillis() > (*currentImages)[i].nextFrameTime;
+        bool needFrameChange = GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
         if (needFrameChange)
         {
           shouldChangeDisplay = true;
@@ -362,20 +385,35 @@ void displayLoop(RGBMatrix *matrix)
 
       if (shouldChangeDisplay)
       {
-        for (unsigned short i = 0; i < currentImages->size(); i++)
-        {
-          bool needFrameChange = GetTimeInMillis() > (*currentImages)[i].nextFrameTime;
-          if (needFrameChange)
+          if (collections[currentCollectionIdx]->displayDuration > 0 &&  GetTimeInMillis() - collections[currentCollectionIdx]->displayStartTime > (collections[currentCollectionIdx]->displayDuration * 1000))
           {
-            (*currentImages)[i].currentFrameID = ((*currentImages)[i].currentFrameID + 1) % (*currentImages)[i].frames.size();
+            debug_print("\033[0;34mTime is up for current collection, should move to next %d\033", nextCollectionIdx);
+            shouldChangeCollection = true;
           }
 
-          Magick::Image &img = (*currentImages)[i].frames[(*currentImages)[i].currentFrameID];
+        for (unsigned short i = 0; i < collections[currentCollectionIdx]->visibleImages; i++)
+        {
+          bool needFrameChange = GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
+          if (needFrameChange)
+          {
+            if ((*currentImages)[i]->currentFrameID == -1) 
+            {
+              (*currentImages)[i]->currentFrameID = 0;
+            } else {
+              (*currentImages)[i]->currentFrameID = ((*currentImages)[i]->currentFrameID + 1) % (*currentImages)[i]->frames.size();
+              if ((*currentImages)[i]->currentFrameID == 0 && collections[currentCollectionIdx]->displayDuration == 0) {
+                debug_print("\033[0;34mCurrent animation is FINISHED, should move to next collection %d\033", nextCollectionIdx);
+                shouldChangeCollection = true;
+              }
+            }
+          }
+
+          Magick::Image &img = (*currentImages)[i]->frames[(*currentImages)[i]->currentFrameID];
           if (needFrameChange)
           {
             int64_t delay_time_us;
 
-            if ((*currentImages)[i].is_multi_frame)
+            if ((*currentImages)[i]->is_multi_frame)
             {
               delay_time_us = img.animationDelay() * 1000; // unit in 1/100s
             }
@@ -387,7 +425,7 @@ void displayLoop(RGBMatrix *matrix)
             {
               delay_time_us = 100 * 1000; // 1/10sec
             }
-            (*currentImages)[i].nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
+            (*currentImages)[i]->nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
           }
           //              fprintf(stderr, "blitz %s\n", currentImages[i].filename);
           blitzFrameInCanvas(matrix, offscreen_canvas, img, i, collections[currentCollectionIdx]->screenMode);
@@ -490,7 +528,8 @@ int main(int argc, char *argv[])
       newCollection->screenMode = Cross;
       newCollection->displayDuration = displayDuration;
       newCollection->regex = optarg;
-      newCollection->loadedFiles = std::vector<LoadedFile>(4);
+      newCollection->loadedFiles = std::vector<LoadedFile *>();
+      newCollection->visibleImages = 4;
       gl_sequences.back()->collections.push_back(newCollection);
     }
     break;
@@ -500,7 +539,8 @@ int main(int argc, char *argv[])
       newCollection->screenMode = FullScreen;
       newCollection->displayDuration = displayDuration;
       newCollection->regex = optarg;
-      newCollection->loadedFiles = std::vector<LoadedFile>(1);
+      newCollection->loadedFiles = std::vector<LoadedFile *>();
+      newCollection->visibleImages = 1;
       gl_sequences.back()->collections.push_back(newCollection);
     }
     break;
@@ -592,7 +632,8 @@ for (unsigned short k = 0; k < gl_sequences.size(); k++)
 
   for (unsigned int z = 0; z < gl_sequences[k]->collections.size(); z++)
   {
-    fprintf(stderr, "\tCollection %d %s => %d images\n", z, gl_sequences[k]->collections[z]->regex, gl_sequences[k]->collections[z]->filePaths.size());
+    const char *displayMode = gl_sequences[k]->collections[z]->screenMode == FullScreen ? "Full screen" : "Cross";
+    fprintf(stderr, "\tCollection %d %s => %d images / %d seconds / display mode %s\n", z + 1, gl_sequences[k]->collections[z]->regex, gl_sequences[k]->collections[z]->filePaths.size(), gl_sequences[k]->collections[z]->displayDuration,  displayMode);
   }
 }
 
