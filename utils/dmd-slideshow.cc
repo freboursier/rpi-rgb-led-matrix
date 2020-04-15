@@ -360,7 +360,14 @@ void displayLoop(RGBMatrix *matrix)
         if (shouldChangeCollection == true && seq->nextCollection()->loadedFiles.size() >= seq->nextCollection()->visibleImages * 2)
         {
             fprintf(stderr, "\033[0;31mClear loaded files, move to next that contains %d images\033\n",  seq->nextCollection()->loadedFiles.size());
-            seq->currentCollection()->loadedFiles.erase(seq->currentCollection()->loadedFiles.begin(), seq->currentCollection()->loadedFiles.begin() + seq->currentCollection()->visibleImages);
+
+for (int i = 0; i < seq->currentCollection()->visibleImages; i++)
+{
+    free(seq->currentCollection()->loadedFiles[0]);
+    seq->currentCollection()->loadedFiles.erase(seq->currentCollection()->loadedFiles.begin());
+}
+
+//            seq->currentCollection()->loadedFiles.erase(seq->currentCollection()->loadedFiles.begin(), seq->currentCollection()->loadedFiles.begin() + seq->currentCollection()->visibleImages);
             seq->forwardCollection();
             currentImages = &(seq->currentCollection()->loadedFiles);
             seq->currentCollection()->displayStartTime = GetTimeInMillis();
