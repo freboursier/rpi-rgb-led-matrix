@@ -62,6 +62,7 @@ void Sequence::forwardCollection() {
     for (auto &loadedFile : currentCollection()->loadedFiles) {
       loadedFile->frames.clear();
     }
+    fprintf(stderr, "About to clead %d loaded files", currentCollection()->loadedFiles.size());
     currentCollection()->loadedFiles.clear();
   }
   currentCollectionIdx = nextCollectionIdx;

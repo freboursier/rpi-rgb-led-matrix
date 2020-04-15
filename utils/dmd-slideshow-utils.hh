@@ -8,6 +8,7 @@
 #include "led-matrix.h"
 #include <Magick++.h>
 #include <magick/image.h>
+#include "dmd-slideshow.h"
 
 using rgb_matrix::RGBMatrix;
 using rgb_matrix::FrameCanvas;

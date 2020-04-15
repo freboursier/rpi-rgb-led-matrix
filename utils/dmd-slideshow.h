@@ -23,7 +23,6 @@ struct    LoadedFile {
     bool is_multi_frame;
     unsigned int    currentFrameID;
     unsigned int frameCount;
-    //     int64_t delay_time_us;
     tmillis_t    nextFrameTime;
 };
 
@@ -40,12 +39,6 @@ struct	FileCollection {
     unsigned short visibleImages; // Number of files show simultaneously
 };
 
-// struct Sequence {
-//     std::vector<FileCollection *> collections;
-//     const char *name;
-//     int     displayTime; // Display timee in seconds
-// };
-
-
+void scheduleInfoMessage();
 
 #endif
