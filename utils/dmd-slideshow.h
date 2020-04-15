@@ -1,4 +1,11 @@
+#ifndef DMD_SLIDESHOW_H_
+#define DMD_SLIDESHOW_H_
+
+#include <vector>
 #include <stdio.h>
+#include <Magick++.h>
+#include <magick/image.h>
+
 
 
 #define debug_print(fmt, ...) \
@@ -7,16 +14,6 @@
 typedef int64_t tmillis_t;
 
 static const tmillis_t distant_future = (1LL<<40); // that is a while.
-
-// struct ImageParams {
-//     ImageParams() : anim_duration_ms(distant_future), wait_ms(1500),
-//     anim_delay_ms(-1), loops(-1), vsync_multiple(1) {}
-//     tmillis_t anim_duration_ms;  // If this is an animation, duration to show.
-//     tmillis_t wait_ms;           // Regular image: duration to show.
-//     tmillis_t anim_delay_ms;     // Animation delay override.
-//     int loops;
-//     int vsync_multiple;
-// };
 
 struct    LoadedFile {
     LoadedFile(): is_multi_frame(0), currentFrameID(0), nextFrameTime(-distant_future){};
@@ -45,16 +42,12 @@ struct	FileCollection {
     unsigned short visibleImages; // Number of files show simultaneously
 };
 
-struct Sequence {
-    std::vector<FileCollection *> collections;
-    const char *name;
-    int     displayTime; // Display timee in seconds
-};
+// struct Sequence {
+//     std::vector<FileCollection *> collections;
+//     const char *name;
+//     int     displayTime; // Display timee in seconds
+// };
 
-volatile bool interrupt_received = false;
-static void InterruptHandler(int signo) {
-    interrupt_received = true;
-}
 
 static tmillis_t GetTimeInMillis() {
     struct timeval tp;
@@ -69,3 +62,5 @@ static void SleepMillis(tmillis_t milli_seconds) {
     ts.tv_nsec = (milli_seconds % 1000) * 1000000;
     nanosleep(&ts, NULL);
 }
+
+#endif
