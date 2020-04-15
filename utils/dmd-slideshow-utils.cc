@@ -1,7 +1,10 @@
 #include "dmd-slideshow-utils.hh"
+#include "dmd-slideshow.h"
+
 #include <string.h>
 #include <stdio.h>
-#include "led-matrix.h"
+
+
 
 bool    isValidDirent(struct dirent *entry)
 {
@@ -86,4 +89,104 @@ void    setThreadPriority(int priority, uint32_t affinity_mask)
                     affinity_mask, strerror(err));
         }
     }
+}
+
+
+void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas,
+                        Magick::Image &img, unsigned int position,
+                        ScreenMode screenMode) {
+  if (screenMode == FullScreen) {
+    img.scale(Magick::Geometry(matrix->width(), matrix->height()));
+  }
+  int x_offset = position % 2 == 0 ? 0 : matrix->width() / 2;
+
+  int y_offset = position <= 1 ? 0 : matrix->height() / 2;
+  for (size_t y = 0; y < img.rows(); ++y) {
+    for (size_t x = 0; x < img.columns(); ++x) {
+      const Magick::Color &c = img.pixelColor(x, y);
+      if (c.alphaQuantum() < 256) {
+        offscreen_canvas->SetPixel(x + x_offset, y + y_offset,
+                                   ScaleQuantumToChar(c.redQuantum()),
+                                   ScaleQuantumToChar(c.greenQuantum()),
+                                   ScaleQuantumToChar(c.blueQuantum()));
+      }
+    }
+  }
+}
+
+void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas) {
+  for (int i = 0; i < matrix->width(); i++) {
+    offscreen_canvas->SetPixel(i, matrix->height() / 2 - 1, 0, 0, 0);
+    offscreen_canvas->SetPixel(i, matrix->height() / 2, 0, 0, 0);
+  }
+  for (int i = 0; i < matrix->height(); i++) {
+    offscreen_canvas->SetPixel(matrix->width() / 2 - 1, i, 0, 0, 0);
+    offscreen_canvas->SetPixel(matrix->width() / 2, i, 0, 0, 0);
+  }
+}
+
+void *LoadFile(void *inParam) {
+  setThreadPriority(3, (1 << 2));
+
+  FileCollection *collection = (FileCollection *)inParam;
+
+  while (collection->loadedFiles.size() < collection->visibleImages * 2) {
+    std::vector<Magick::Image> frames;
+    int count = 0;
+    int maxTries = 3;
+    while (true) {
+      int randCount = rand() % collection->filePaths.size();
+      const char *imagePath = collection->filePaths[randCount];
+      try {
+        fprintf(stderr, "Attempt to load >%s<\n", imagePath);
+        readImages(&frames, imagePath);
+
+        LoadedFile *loadedFile = new LoadedFile();
+
+        loadedFile->filename = imagePath;
+        loadedFile->is_multi_frame = frames.size() > 1;
+        loadedFile->frameCount = frames.size();
+        loadedFile->currentFrameID = -1;
+        loadedFile->nextFrameTime = GetTimeInMillis();
+        collection->loadedFiles.push_back(loadedFile);
+
+        break;
+      } catch (std::exception &e) {
+        fprintf(stderr, "Failed to load file: %s", e.what());
+        if (++count == maxTries)
+        {
+          fprintf(stderr, "Too many errors when loading file: %s", e.what());
+          pthread_exit((void *)1);
+        }
+      }
+    }
+    if (frames.size() == 0) {
+      fprintf(stderr, "No image found.");
+      pthread_exit((void *)1);
+    }
+    if (frames.size() > 1) {
+      Magick::coalesceImages(&(collection->loadedFiles.back()->frames),
+                             frames.begin(), frames.end());
+    } else {
+      //            &((*loadedFile)[0].frames)->push_back(loadedFile[0]);   //
+      //            just a single still image.
+    }
+  }
+
+  pthread_exit((void *)0);
+}
+
+/// Time stuff
+tmillis_t GetTimeInMillis() {
+    struct timeval tp;
+    gettimeofday(&tp, NULL);
+    return tp.tv_sec * 1000 + tp.tv_usec / 1000;
+}
+
+void SleepMillis(tmillis_t milli_seconds) {
+    if (milli_seconds <= 0) return;
+    struct timespec ts;
+    ts.tv_sec = milli_seconds / 1000;
+    ts.tv_nsec = (milli_seconds % 1000) * 1000000;
+    nanosleep(&ts, NULL);
 }

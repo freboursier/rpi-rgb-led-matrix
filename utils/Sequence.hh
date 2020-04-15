@@ -16,11 +16,8 @@ class Sequence {
         FileCollection  *nextCollection();
 
         void        printContent();
-
         void        loadCollections(std::vector<const char *> filenames);
-
         void        forwardCollection();
-
 
     std::vector<FileCollection *> collections;
     const char *name;

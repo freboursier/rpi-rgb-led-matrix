@@ -2,7 +2,7 @@
 
 # En cours
 
- * Transformer Sequence en classe
+ * Trouver la putain de LEAK
  * ne pas pré-loader trop d'images si on a une seule Collection dans une séquence
  * Gérer le changement de séquence
  * afficher un splash message au changement de séquence (de préférence pas à la place de l'animation)
