@@ -109,7 +109,7 @@ void displayLoop(RGBMatrix *matrix) {
               seq->nextCollection()->loadedFiles.size(),
               seq->nextCollection()->regex,
               seq->nextCollection()->visibleImages);
-      int ret = pthread_create(&workerThread, NULL, LoadFile,
+      int ret = pthread_create(&workerThread, NULL, LoadFile,   
                                (void *)(seq->nextCollection()));
       if (ret) {
         printf("Failed to create worker thread\n");
@@ -130,7 +130,7 @@ void displayLoop(RGBMatrix *matrix) {
         }
       }
     }
-    if (shouldChangeCollection == true && seq->nextCollection()->loadedFiles.size() >= seq->nextCollection()->visibleImages * 2) {
+    if (shouldChangeCollection == true && seq->nextCollection()->loadedFiles.size() >= seq->nextCollection()->visibleImages * 2 && workerThread == 0) {
      seq->forwardCollection();
       currentImages = &(seq->currentCollection()->loadedFiles);
       seq->currentCollection()->displayStartTime = GetTimeInMillis();
@@ -152,10 +152,7 @@ void displayLoop(RGBMatrix *matrix) {
         if (seq->currentCollection()->displayDuration > 0 &&
             GetTimeInMillis() - seq->currentCollection()->displayStartTime >
                 (seq->currentCollection()->displayDuration * 1000)) {
-          fprintf(stderr,
-                  "\033[0;34mTime is up for current collection, should move to "
-                  "next %d\033",
-                  42);
+          fprintf(stderr, "\033[0;34mTime is up for current collection, should move to next %d\033\n", 42);
           shouldChangeCollection = true;
         }
 
@@ -229,34 +226,6 @@ void displayLoop(RGBMatrix *matrix) {
   }
 }
 
-static bool LoadImageAndScale(const char *filename, int target_width,
-                              int target_height, bool fill_width,
-                              bool fill_height,
-                              std::vector<Magick::Image> *result,
-                              std::string *err_msg) {
-  std::vector<Magick::Image> frames;
-  try {
-    readImages(&frames, filename);
-  } catch (std::exception &e) {
-    if (e.what())
-      *err_msg = e.what();
-    return false;
-  }
-  if (frames.size() == 0) {
-    fprintf(stderr, "No image found.");
-    return false;
-  }
-
-  // Put together the animation from single frames. GIFs can have nasty
-  // disposal modes, but they are handled nicely by coalesceImages()
-  if (frames.size() > 1) {
-    Magick::coalesceImages(result, frames.begin(), frames.end());
-  } else {
-    result->push_back(frames[0]); // just a single still image.
-  }
-
-  return true;
-}
 
 int main(int argc, char *argv[]) {
   srand(time(0));

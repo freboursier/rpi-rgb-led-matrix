@@ -3,7 +3,7 @@ CXXFLAGS=-Wall -g  -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -Wno-unu
 OBJECTS=led-image-viewer.o
 BINARIES=led-image-viewer
 
-OPTIONAL_OBJECTS=video-viewer.o emoji-scroller.o dmd-slideshow-utils.o dmd-slideshow.o Sequence.o IRRemote.o
+OPTIONAL_OBJECTS=video-viewer.o emoji-scroller.o dmd-slideshow-utils.o dmd-slideshow.o Sequence.o IRRemote.o FileCollection.o LoadedFile.o
 OPTIONAL_BINARIES=video-viewer emoji-scroller dmd-slideshow
 
 # Where our library resides. You mostly only need to change the
@@ -28,8 +28,8 @@ $(RGB_LIBRARY): FORCE
 led-image-viewer: led-image-viewer.o $(RGB_LIBRARY)
 	$(CXX) $(CXXFLAGS) led-image-viewer.o -o $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
 
-dmd-slideshow: dmd-slideshow-utils.o dmd-slideshow.o Sequence.o IRRemote.o $(RGB_LIBRARY)
-	$(CXX) $(CXXFLAGS) dmd-slideshow.o dmd-slideshow-utils.o Sequence.o IRRemote.o -o  $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
+dmd-slideshow: dmd-slideshow-utils.o dmd-slideshow.o Sequence.o IRRemote.o  FileCollection.o LoadedFile.o $(RGB_LIBRARY)
+	$(CXX) $(CXXFLAGS) dmd-slideshow.o dmd-slideshow-utils.o Sequence.o IRRemote.o  FileCollection.o LoadedFile.o -o  $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
 
 
 emoji-scroller: emoji-scroller.o $(RGB_LIBRARY)

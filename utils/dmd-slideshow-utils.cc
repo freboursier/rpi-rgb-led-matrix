@@ -1,5 +1,6 @@
 #include "dmd-slideshow-utils.hh"
 #include "dmd-slideshow.h"
+#include "FileCollection.hh"
 
 #include <string.h>
 #include <stdio.h>
@@ -129,7 +130,7 @@ void *LoadFile(void *inParam) {
   setThreadPriority(3, (1 << 2));
 
   FileCollection *collection = (FileCollection *)inParam;
-
+    fprintf(stderr, "LOAD FILE, got %d files, run until we got %d\n", collection->loadedFiles.size(), collection->visibleImages * 2);
   while (collection->loadedFiles.size() < collection->visibleImages * 2) {
     std::vector<Magick::Image> frames;
     int count = 0;
@@ -167,6 +168,7 @@ void *LoadFile(void *inParam) {
     if (frames.size() > 1) {
       Magick::coalesceImages(&(collection->loadedFiles.back()->frames),
                              frames.begin(), frames.end());
+        frames.clear();
     } else {
       //            &((*loadedFile)[0].frames)->push_back(loadedFile[0]);   //
       //            just a single still image.

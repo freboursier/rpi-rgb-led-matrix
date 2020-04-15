@@ -6,6 +6,7 @@
 #include <sys/types.h>
 
 #include "dmd-slideshow.h"
+#include "FileCollection.hh"
 
 class Sequence {
     public:

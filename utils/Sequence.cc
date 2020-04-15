@@ -59,12 +59,16 @@ FileCollection *Sequence::nextCollection() {
 
 void Sequence::forwardCollection() {
   if (currentCollection() != NULL) {
+      fprintf(stderr, "About to DELETE %d loaded files\n", currentCollection()->loadedFiles.size());
     for (auto &loadedFile : currentCollection()->loadedFiles) {
-      loadedFile->frames.clear();
+    //    loadedFile->frames.clear();
+        delete loadedFile;
     }
-    fprintf(stderr, "About to clead %d loaded files", currentCollection()->loadedFiles.size());
+    fprintf(stderr, "About to clear %d loaded files", currentCollection()->loadedFiles.size());
     currentCollection()->loadedFiles.clear();
   }
+  
   currentCollectionIdx = nextCollectionIdx;
   nextCollectionIdx = (nextCollectionIdx + 1) % collections.size();
+  fprintf(stderr, "FWD, new collection is %s\n", currentCollection()->regex);
 }
