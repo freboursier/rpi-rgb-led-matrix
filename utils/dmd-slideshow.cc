@@ -34,7 +34,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <regex.h>
+
 #include <linux/input.h>
 #include <algorithm>
 #include <map>
@@ -593,41 +593,10 @@ int main(int argc, char *argv[])
     
     for ( auto &sequence : gl_sequences ) {
         
-        fprintf(stderr, "Attempt to load sequence %s", sequence->name);
-        
-        for ( auto &collection : sequence->collections ) {
-            fprintf(stderr, "Fill collection %s\n", collection->regex);
-            
-            regex_t regex;
-            
-            int reti = regcomp(&regex, collection->regex, REG_ICASE);
-            if (reti)
-            {
-                fprintf(stderr, "Could not compile regex\n");
-            }
-            
-            for (unsigned int j = 0; j < gl_filenames.size(); j++)
-            {
-                reti = regexec(&regex, gl_filenames[j], 0, NULL, 0);
-                if (!reti)
-                {
-#ifdef MEGA_VERBOSE
-                    fprintf(stderr, "Match %s => %s\n", collection->regex, gl_filenames[j]);
-#endif
-                    collection->filePaths.push_back(gl_filenames[j]);
-                }
-            }
-            fprintf(stderr, "\t%d pictures\n", collection->filePaths.size());
-            regfree(&regex);
-        }
-        
+       sequence->loadCollections(gl_filenames);
+         sequence->printContent();
     }
     
-    
-    for ( auto &sequence : gl_sequences ) {
-       sequence->printContent();
-    }
-
     runtime_opt.do_gpio_init = (stream_output == NULL);
     matrix = CreateMatrixFromOptions(matrix_options, runtime_opt);
     if (matrix == NULL)

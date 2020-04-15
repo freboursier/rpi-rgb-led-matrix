@@ -1,8 +1,43 @@
 #include "Sequence.hh"
+#include <regex.h>
+
+using std::vector;
 
 Sequence::Sequence()  {}
 
 Sequence::~Sequence()  {}
+
+void        Sequence::loadCollections(vector<const char *> filenames)
+{
+     fprintf(stderr, "Attempt to load sequence %s", name);
+        
+        for ( auto &collection : collections ) {
+            fprintf(stderr, "Fill collection %s\n", collection->regex);
+            
+            regex_t regex;
+            
+            int reti = regcomp(&regex, collection->regex, REG_ICASE);
+            if (reti)
+            {
+                fprintf(stderr, "Could not compile regex\n");
+            }
+            
+            for (auto &filename : filenames)
+            {
+                reti = regexec(&regex, filename, 0, NULL, 0);
+                if (!reti)
+                {
+#ifdef MEGA_VERBOSE
+                    fprintf(stderr, "Match %s => %s\n", collection->regex, filename);
+#endif
+                    collection->filePaths.push_back(filename);
+                }
+            }
+            fprintf(stderr, "\t%d pictures\n", collection->filePaths.size());
+            regfree(&regex);
+        }
+}
+
 
 FileCollection  *Sequence::currentCollection()
 {
@@ -21,6 +56,7 @@ FileCollection  *Sequence::currentCollection()
             fprintf(stderr, "\tCollection %s => %d images / %d seconds / display mode %s\n",  collection->regex, collection->filePaths.size(), collection->displayDuration,  displayMode);
         }
         }
+
 
 
 FileCollection  *Sequence::nextCollection()
