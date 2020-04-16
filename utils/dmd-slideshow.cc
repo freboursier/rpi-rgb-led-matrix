@@ -43,13 +43,12 @@
 
 #include "Sequence.hh"
 
+#include "IRRemote.hh"
 #include "dmd-slideshow-utils.hh"
 #include "dmd-slideshow.hh"
-#include "IRRemote.hh"
 #include <wand/magick_wand.h>
 
 //#define    MEGA_VERBOSE
-
 
 #define DEBUG 0
 #define IMAGE_DISPLAY_DURATION 5
@@ -75,7 +74,6 @@ static void InterruptHandler(int signo) { interrupt_received = true; }
 
 void scheduleInfoMessage() { gl_infotimeout = time(0) + 3; }
 
-
 void displayLoop(RGBMatrix *matrix) {
   FrameCanvas *offscreen_canvas = matrix->CreateFrameCanvas();
   pthread_t workerThread = 0;
@@ -84,7 +82,7 @@ void displayLoop(RGBMatrix *matrix) {
   Sequence *seq = gl_sequences.front();
   fprintf(stderr, "%d collections available\n", seq->collections.size());
 
- // int frameCount = 0;
+  // int frameCount = 0;
 
   std::vector<LoadedFile *> *currentImages;
 
@@ -103,14 +101,9 @@ void displayLoop(RGBMatrix *matrix) {
 
     tmillis_t frame_start = GetTimeInMillis();
 
-    if (workerThread == 0 && seq->nextCollection()->loadedFiles.size() <
-                                 seq->nextCollection()->visibleImages * 2) {
-      fprintf(stderr, " => %d loaded files in collection %s, need %d\n",
-              seq->nextCollection()->loadedFiles.size(),
-              seq->nextCollection()->regex,
-              seq->nextCollection()->visibleImages);
-      int ret = pthread_create(&workerThread, NULL, LoadFile,   
-                               (void *)(seq->nextCollection()));
+    if (workerThread == 0 && seq->nextCollection()->loadedFiles.size() < seq->nextCollection()->visibleImages * 2) {
+      fprintf(stderr, " => %d loaded files in collection %s, need %d\n", seq->nextCollection()->loadedFiles.size(), seq->nextCollection()->regex, seq->nextCollection()->visibleImages);
+      int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)(seq->nextCollection()));
       if (ret) {
         printf("Failed to create worker thread\n");
       }
@@ -119,9 +112,7 @@ void displayLoop(RGBMatrix *matrix) {
     if (workerThread) {
       void *threadRetval = NULL;
       if (0 == pthread_tryjoin_np(workerThread, &threadRetval)) {
-        fprintf(stderr,
-                "\033[0;31mWorker thread has finished\033[0m with value %d\n",
-                (int)threadRetval);
+        fprintf(stderr, "\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
         workerThread = 0;
         if (seq->currentCollection() == NULL) {
           seq->forwardCollection();
@@ -131,7 +122,7 @@ void displayLoop(RGBMatrix *matrix) {
       }
     }
     if (shouldChangeCollection == true && seq->nextCollection()->loadedFiles.size() >= seq->nextCollection()->visibleImages * 2 && workerThread == 0) {
-     seq->forwardCollection();
+      seq->forwardCollection();
       currentImages = &(seq->currentCollection()->loadedFiles);
       seq->currentCollection()->displayStartTime = GetTimeInMillis();
     }
@@ -143,76 +134,46 @@ void displayLoop(RGBMatrix *matrix) {
       for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
         bool needFrameChange = GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
         if (needFrameChange) {
-              shouldChangeDisplay = true;
+          shouldChangeDisplay = true;
           break;
         }
       }
 
       if (shouldChangeDisplay) {
-        if (seq->currentCollection()->displayDuration > 0 &&
-            GetTimeInMillis() - seq->currentCollection()->displayStartTime >
-                (seq->currentCollection()->displayDuration * 1000)) {
+        if (seq->currentCollection()->displayDuration > 0 && GetTimeInMillis() - seq->currentCollection()->displayStartTime > (seq->currentCollection()->displayDuration * 1000)) {
           fprintf(stderr, "\033[0;34mTime is up for current collection, should move to next \033\n", 42);
           shouldChangeCollection = true;
         }
-        bool needFrameChange = false;
-        int i = 0;
+ 
+        for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
 
-        for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) { 
-                 
-          bool needFrameChange =
-              GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
-              
+          bool needFrameChange = GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
+
           if (needFrameChange) {
-              if (MagickNextImage((*currentImages)[i]->wand) == MagickFalse) {
-                        MagickResetIterator((*currentImages)[i]->wand );
-                        if (seq->currentCollection()->displayDuration == 0) {
-                            fprintf(stderr,
-                        "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n", 42); // simplifier: faire ce code après les affichage
-                             // pour se débarasser du shouldChangeCollection et
-                             // forweard() après les blitz a l'écran
+            if (MagickNextImage((*currentImages)[i]->wand) == MagickFalse) {
+              MagickResetIterator((*currentImages)[i]->wand);
+              if (seq->currentCollection()->displayDuration == 0) {
+                fprintf(stderr, "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n", 42); // simplifier: faire ce code après les affichage
+                                                                                                                       // pour se débarasser du shouldChangeCollection et
+                                                                                                                       // forweard() après les blitz a l'écran
                 shouldChangeCollection = true;
-                        }
-
-
               }
-
-            
-            // if ((*currentImages)[i]->currentFrameID == -1) {
-            //   (*currentImages)[i]->currentFrameID = 0;
-            // } else {
-            //   (*currentImages)[i]->currentFrameID = ((*currentImages)[i]->currentFrameID + 1) % (*currentImages)[i]->frames.size();
-            //   if ((*currentImages)[i]->currentFrameID == 0 && seq->currentCollection()->displayDuration == 0) {
-            //     fprintf(stderr,
-            //             "\033[0;34mCurrent animation is FINISHED, should move "
-            //             "to next collection %d\033",
-            //             42); // simplifier: faire ce code après les affichage
-            //                  // pour se débarasser du shouldChangeCollection et
-            //                  // forweard() après les blitz a l'écran
-            //     shouldChangeCollection = true;
-            //   }
-            // }
+            }
           }
 
-          //Magick::Image &img = (*currentImages)[i]->frames[(*currentImages)[i]->currentFrameID];
-          /*if (needFrameChange) {
-            int64_t delay_time_us;
+          if (needFrameChange) {
+            int64_t delay_time_us = MagickGetImageDelay((*currentImages)[i]->wand);
+            if (delay_time_us == 0) {
+                delay_time_us = 50 * 1000; // single image.
+            } else if (delay_time_us < 0) {
+                delay_time_us = 100 * 1000; // 1/10sec
+            }
 
-            if ((*currentImages)[i]->is_multi_frame) {
-              delay_time_us = img.animationDelay() * 1000; // unit in 1/100s
-            } else {
-              delay_time_us = 5 * 1000; // single image.
-            }
-            if (delay_time_us <= 0) {
-              delay_time_us = 100 * 1000; // 1/10sec
-            }
-            (*currentImages)[i]->nextFrameTime =
-                GetTimeInMillis() + delay_time_us / 100.0;
-          } */
-/*
-          blitzFrameInCanvas(matrix, offscreen_canvas, img, i,
-                             seq->currentCollection()->screenMode);
-                             */
+            (*currentImages)[i]->nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
+          }
+          
+                    blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i]->wand, i, seq->currentCollection()->screenMode);
+                                       
         }
         if (seq->currentCollection()->screenMode == Cross) {
           drawCross(matrix, offscreen_canvas);
@@ -221,9 +182,7 @@ void displayLoop(RGBMatrix *matrix) {
         if (time(0) < gl_infotimeout) {
           rgb_matrix::Color blackColor = {.r = 0, .g = 0, .b = 0};
 
-          DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(),
-                   {.r = 255, .g = 255, .b = 255}, &blackColor, gl_infoMessage,
-                   0);
+          DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), {.r = 255, .g = 255, .b = 255}, &blackColor, gl_infoMessage, 0);
         }
 
         offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
@@ -231,22 +190,19 @@ void displayLoop(RGBMatrix *matrix) {
     }
 
     tmillis_t ellapsedTime = GetTimeInMillis() - frame_start;
-    tmillis_t next_frame =
-        frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
+    tmillis_t next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
     SleepMillis(next_frame - frame_start);
 
-//    frameCount++;
+    //    frameCount++;
   }
 }
-
 
 int main(int argc, char *argv[]) {
   srand(time(0));
   InitializeMagick(*argv);
   RGBMatrix::Options matrix_options;
   rgb_matrix::RuntimeOptions runtime_opt;
-  if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv, &matrix_options,
-                                         &runtime_opt)) {
+  if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_opt)) {
     return usage(argv[0]);
   }
   int displayDuration = 10;
@@ -308,8 +264,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (isValidDirent(entry)) {
-      int mallocSize =
-          sizeof(char) * (strlen(gifDirectory) + strlen(entry->d_name) + 2);
+      int mallocSize = sizeof(char) * (strlen(gifDirectory) + strlen(entry->d_name) + 2);
       char *filePath = (char *)malloc(mallocSize);
       sprintf(filePath, "%s/%s", gifDirectory, entry->d_name);
       gl_filenames.push_back(filePath);
@@ -337,8 +292,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  printf("Size: %dx%d. Hardware gpio mapping: %s\n", matrix->width(),
-         matrix->height(), matrix_options.hardware_mapping);
+  printf("Size: %dx%d. Hardware gpio mapping: %s\n", matrix->width(), matrix->height(), matrix_options.hardware_mapping);
 
   fprintf(stderr, "%d available images\n", gl_filenames.size());
 

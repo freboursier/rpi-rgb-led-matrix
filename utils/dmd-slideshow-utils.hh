@@ -6,8 +6,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include "led-matrix.h"
-// #include <Magick++.h>
-// #include <magick/image.h>
+#include <wand/magick_wand.h>
 #include "dmd-slideshow.hh"
 
 using rgb_matrix::RGBMatrix;
@@ -31,9 +30,9 @@ void *LoadFile(void *inParam);
 tmillis_t GetTimeInMillis();
 void SleepMillis(tmillis_t milli_seconds);
 
-// void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas,
-//                         Magick::Image &img, unsigned int position,
-//                         ScreenMode screenMode);
+ void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas,
+                         MagickWand  *wand, unsigned int position,
+                         ScreenMode screenMode);
 void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas);
 
 #endif

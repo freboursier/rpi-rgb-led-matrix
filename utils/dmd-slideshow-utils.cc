@@ -92,28 +92,34 @@ void    setThreadPriority(int priority, uint32_t affinity_mask)
     }
 }
 
-/*
+
 void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas,
-                        Magick::Image &img, unsigned int position,
+                        MagickWand  *wand, unsigned int position,
                         ScreenMode screenMode) {
+
   if (screenMode == FullScreen) {
-    img.scale(Magick::Geometry(matrix->width(), matrix->height()));
+    MagickScaleImage(wand, matrix->width(), matrix->height());
   }
   int x_offset = position % 2 == 0 ? 0 : matrix->width() / 2;
  // https://www.imagemagick.org/discourse-server/viewtopic.php?t=31691 for nice speedup
   int y_offset = position <= 1 ? 0 : matrix->height() / 2;
-  for (size_t y = 0; y < img.rows(); ++y) {
-    for (size_t x = 0; x < img.columns(); ++x) {
-      const Magick::Color &c = img.pixelColor(x, y);
-      if (c.alphaQuantum() < 256) { // https://imagemagick.org/discourse-server/viewtopic.php?t=19581
-        offscreen_canvas->SetPixel(x + x_offset, y + y_offset,
-                                   ScaleQuantumToChar(c.redQuantum()),
-                                   ScaleQuantumToChar(c.greenQuantum()),
-                                   ScaleQuantumToChar(c.blueQuantum()));
-      }
+
+  unsigned long columns = MagickGetImageWidth(wand);
+  unsigned long rows = MagickGetImageHeight(wand);
+  for (size_t y = 0; y < rows; ++y) {
+    for (size_t x = 0; x < columns; ++x) {
+      unsigned char pixels[27];
+      MagickGetImagePixels(wand, x + x_offset, y + y_offset, 1, 1, "RGBA", CharPixel, pixels);
+     offscreen_canvas->SetPixel(x + x_offset, y + y_offset, pixels[0], pixels[1], pixels[2]);
+      // if (c.alphaQuantum() < 256) { // https://imagemagick.org/discourse-server/viewtopic.php?t=19581
+      //   offscreen_canvas->SetPixel(x + x_offset, y + y_offset,
+      //                              ScaleQuantumToChar(c.redQuantum()),
+      //                              ScaleQuantumToChar(c.greenQuantum()),
+      //                              ScaleQuantumToChar(c.blueQuantum()));
+      // }
     }
   }
-}*/
+}
 
 void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas) {
   for (int i = 0; i < matrix->width(); i++) {
@@ -146,7 +152,6 @@ void *LoadFile(void *inParam) {
         LoadedFile *loadedFile = new LoadedFile();
 
         loadedFile->filename = imagePath;
-//        loadedFile->currentFrameID = -1;
         loadedFile->nextFrameTime = GetTimeInMillis();
         collection->loadedFiles.push_back(loadedFile);
 
@@ -160,8 +165,29 @@ void *LoadFile(void *inParam) {
         }
       }
     }
+  //   int frameCount = 0;
+  //   MagickResetIterator(tempWand);
+  //   while (MagickNextImage(tempWand)  != MagickFalse) {
+  //    unsigned long columns, rows;
+  //    MagickGetSize(tempWand, &columns, &rows);
+  //    fprintf(stderr, "==TMP %lu x %lu == %lu x %lu \n", columns, rows, MagickGetImageWidth(tempWand), MagickGetImageHeight(tempWand));
+  //    frameCount++;
+  //  }
+  //  fprintf(stderr, "TMP Frame count for %s: %d\n", collection->loadedFiles.back()->filename, frameCount);
+
+
     collection->loadedFiles.back()->wand = MagickCoalesceImages(tempWand);
     MagickResetIterator(collection->loadedFiles.back()->wand);
+//   frameCount = 0;
+
+  //  while (MagickNextImage(collection->loadedFiles.back()->wand) != MagickFalse) {
+  //    unsigned long columns, rows;
+  //    MagickGetSize(collection->loadedFiles.back()->wand, &columns, &rows);
+  //    fprintf(stderr, "%lu x %lu", columns, rows);
+  //    frameCount++;
+  //  }
+  //  fprintf(stderr, "Frame count for %s: %d\n", collection->loadedFiles.back()->filename, frameCount);
+
     DestroyMagickWand(tempWand);
   }
 
