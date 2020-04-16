@@ -1,20 +1,16 @@
 
 #ifndef LOADED_FILE_H
 #define LOADED_FILE_H
-#include <Magick++.h>
-#include <magick/image.h>
-#include <vector>
-#include "dmd-slideshow.h"
+#include <wand/magick_wand.h>
+#include "dmd-slideshow.hh"
 
 class    LoadedFile {
     public:
     LoadedFile();
     ~LoadedFile();
+
     const char *filename;
-    std::vector<Magick::Image> frames;
-    bool is_multi_frame;
-    int    currentFrameID;
-    unsigned int frameCount;
+    MagickWand  *wand;
     tmillis_t    nextFrameTime;
 };
 

@@ -44,9 +44,9 @@
 #include "Sequence.hh"
 
 #include "dmd-slideshow-utils.hh"
-#include "dmd-slideshow.h"
+#include "dmd-slideshow.hh"
 #include "IRRemote.hh"
-
+#include <wand/magick_wand.h>
 
 //#define    MEGA_VERBOSE
 
@@ -84,7 +84,7 @@ void displayLoop(RGBMatrix *matrix) {
   Sequence *seq = gl_sequences.front();
   fprintf(stderr, "%d collections available\n", seq->collections.size());
 
-  int frameCount = 0;
+ // int frameCount = 0;
 
   std::vector<LoadedFile *> *currentImages;
 
@@ -152,37 +152,50 @@ void displayLoop(RGBMatrix *matrix) {
         if (seq->currentCollection()->displayDuration > 0 &&
             GetTimeInMillis() - seq->currentCollection()->displayStartTime >
                 (seq->currentCollection()->displayDuration * 1000)) {
-          fprintf(stderr, "\033[0;34mTime is up for current collection, should move to next %d\033\n", 42);
+          fprintf(stderr, "\033[0;34mTime is up for current collection, should move to next \033\n", 42);
           shouldChangeCollection = true;
         }
+        bool needFrameChange = false;
+        int i = 0;
 
-        for (unsigned short i = 0; i < seq->currentCollection()->visibleImages;
-             i++) {
+        for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) { 
+                 
           bool needFrameChange =
               GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
+              
           if (needFrameChange) {
-            if ((*currentImages)[i]->currentFrameID == -1) {
-              (*currentImages)[i]->currentFrameID = 0;
-            } else {
-              (*currentImages)[i]->currentFrameID =
-                  ((*currentImages)[i]->currentFrameID + 1) %
-                  (*currentImages)[i]->frames.size();
-              if ((*currentImages)[i]->currentFrameID == 0 &&
-                  seq->currentCollection()->displayDuration == 0) {
-                fprintf(stderr,
-                        "\033[0;34mCurrent animation is FINISHED, should move "
-                        "to next collection %d\033",
-                        42); // simplifier: faire ce code après les affichage
+              if (MagickNextImage((*currentImages)[i]->wand) == MagickFalse) {
+                        MagickResetIterator((*currentImages)[i]->wand );
+                        if (seq->currentCollection()->displayDuration == 0) {
+                            fprintf(stderr,
+                        "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n", 42); // simplifier: faire ce code après les affichage
                              // pour se débarasser du shouldChangeCollection et
                              // forweard() après les blitz a l'écran
                 shouldChangeCollection = true;
+                        }
+
+
               }
-            }
+
+            
+            // if ((*currentImages)[i]->currentFrameID == -1) {
+            //   (*currentImages)[i]->currentFrameID = 0;
+            // } else {
+            //   (*currentImages)[i]->currentFrameID = ((*currentImages)[i]->currentFrameID + 1) % (*currentImages)[i]->frames.size();
+            //   if ((*currentImages)[i]->currentFrameID == 0 && seq->currentCollection()->displayDuration == 0) {
+            //     fprintf(stderr,
+            //             "\033[0;34mCurrent animation is FINISHED, should move "
+            //             "to next collection %d\033",
+            //             42); // simplifier: faire ce code après les affichage
+            //                  // pour se débarasser du shouldChangeCollection et
+            //                  // forweard() après les blitz a l'écran
+            //     shouldChangeCollection = true;
+            //   }
+            // }
           }
 
-          Magick::Image &img =
-              (*currentImages)[i]->frames[(*currentImages)[i]->currentFrameID];
-          if (needFrameChange) {
+          //Magick::Image &img = (*currentImages)[i]->frames[(*currentImages)[i]->currentFrameID];
+          /*if (needFrameChange) {
             int64_t delay_time_us;
 
             if ((*currentImages)[i]->is_multi_frame) {
@@ -195,11 +208,11 @@ void displayLoop(RGBMatrix *matrix) {
             }
             (*currentImages)[i]->nextFrameTime =
                 GetTimeInMillis() + delay_time_us / 100.0;
-          }
-          //              fprintf(stderr, "blitz %s\n",
-          //              currentImages[i].filename);
+          } */
+/*
           blitzFrameInCanvas(matrix, offscreen_canvas, img, i,
                              seq->currentCollection()->screenMode);
+                             */
         }
         if (seq->currentCollection()->screenMode == Cross) {
           drawCross(matrix, offscreen_canvas);
@@ -222,14 +235,14 @@ void displayLoop(RGBMatrix *matrix) {
         frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
     SleepMillis(next_frame - frame_start);
 
-    frameCount++;
+//    frameCount++;
   }
 }
 
 
 int main(int argc, char *argv[]) {
   srand(time(0));
-  Magick::InitializeMagick(*argv);
+  InitializeMagick(*argv);
   RGBMatrix::Options matrix_options;
   rgb_matrix::RuntimeOptions runtime_opt;
   if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv, &matrix_options,

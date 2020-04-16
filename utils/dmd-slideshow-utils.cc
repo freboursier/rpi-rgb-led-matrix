@@ -1,5 +1,5 @@
 #include "dmd-slideshow-utils.hh"
-#include "dmd-slideshow.h"
+#include "dmd-slideshow.hh"
 #include "FileCollection.hh"
 
 #include <string.h>
@@ -92,7 +92,7 @@ void    setThreadPriority(int priority, uint32_t affinity_mask)
     }
 }
 
-
+/*
 void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas,
                         Magick::Image &img, unsigned int position,
                         ScreenMode screenMode) {
@@ -100,12 +100,12 @@ void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas,
     img.scale(Magick::Geometry(matrix->width(), matrix->height()));
   }
   int x_offset = position % 2 == 0 ? 0 : matrix->width() / 2;
-
+ // https://www.imagemagick.org/discourse-server/viewtopic.php?t=31691 for nice speedup
   int y_offset = position <= 1 ? 0 : matrix->height() / 2;
   for (size_t y = 0; y < img.rows(); ++y) {
     for (size_t x = 0; x < img.columns(); ++x) {
       const Magick::Color &c = img.pixelColor(x, y);
-      if (c.alphaQuantum() < 256) {
+      if (c.alphaQuantum() < 256) { // https://imagemagick.org/discourse-server/viewtopic.php?t=19581
         offscreen_canvas->SetPixel(x + x_offset, y + y_offset,
                                    ScaleQuantumToChar(c.redQuantum()),
                                    ScaleQuantumToChar(c.greenQuantum()),
@@ -113,7 +113,7 @@ void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas,
       }
     }
   }
-}
+}*/
 
 void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas) {
   for (int i = 0; i < matrix->width(); i++) {
@@ -132,7 +132,7 @@ void *LoadFile(void *inParam) {
   FileCollection *collection = (FileCollection *)inParam;
     fprintf(stderr, "LOAD FILE, got %d files, run until we got %d\n", collection->loadedFiles.size(), collection->visibleImages * 2);
   while (collection->loadedFiles.size() < collection->visibleImages * 2) {
-    std::vector<Magick::Image> frames;
+    MagickWand  *tempWand=NewMagickWand();
     int count = 0;
     int maxTries = 3;
     while (true) {
@@ -140,14 +140,13 @@ void *LoadFile(void *inParam) {
       const char *imagePath = collection->filePaths[randCount];
       try {
         fprintf(stderr, "Attempt to load >%s<\n", imagePath);
-        readImages(&frames, imagePath);
-
+        if (MagickReadImage(tempWand,imagePath) == MagickFalse) {
+          fprintf(stderr, "Failed to read image at %s\n", imagePath);
+        } 
         LoadedFile *loadedFile = new LoadedFile();
 
         loadedFile->filename = imagePath;
-        loadedFile->is_multi_frame = frames.size() > 1;
-        loadedFile->frameCount = frames.size();
-        loadedFile->currentFrameID = -1;
+//        loadedFile->currentFrameID = -1;
         loadedFile->nextFrameTime = GetTimeInMillis();
         collection->loadedFiles.push_back(loadedFile);
 
@@ -161,18 +160,9 @@ void *LoadFile(void *inParam) {
         }
       }
     }
-    if (frames.size() == 0) {
-      fprintf(stderr, "No image found.");
-      pthread_exit((void *)1);
-    }
-    if (frames.size() > 1) {
-      Magick::coalesceImages(&(collection->loadedFiles.back()->frames),
-                             frames.begin(), frames.end());
-        frames.clear();
-    } else {
-      //            &((*loadedFile)[0].frames)->push_back(loadedFile[0]);   //
-      //            just a single still image.
-    }
+    collection->loadedFiles.back()->wand = MagickCoalesceImages(tempWand);
+    MagickResetIterator(collection->loadedFiles.back()->wand);
+    DestroyMagickWand(tempWand);
   }
 
   pthread_exit((void *)0);

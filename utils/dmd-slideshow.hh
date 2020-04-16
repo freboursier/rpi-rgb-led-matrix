@@ -3,8 +3,9 @@
 
 #include <vector>
 #include <stdio.h>
-#include <Magick++.h>
-#include <magick/image.h>
+// #include <Magick++.h>
+// #include <magick/image.h>
+#include <wand/magick_wand.h>
 #include "dmd-slideshow-utils.hh"
 
 

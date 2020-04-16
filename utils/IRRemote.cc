@@ -1,5 +1,5 @@
 #include "IRRemote.hh"
-#include "dmd-slideshow.h"
+#include "dmd-slideshow.hh"
 #include <fcntl.h>
 #include <linux/input.h>
 #include <sys/stat.h>
