@@ -1,6 +1,7 @@
 #include "dmd-slideshow-utils.hh"
 #include "dmd-slideshow.hh"
 #include "FileCollection.hh"
+#include "Sequence.hh"
 
 #include <string.h>
 #include <stdio.h>
@@ -109,7 +110,7 @@ void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas,
   for (size_t y = 0; y < rows; ++y) {
     for (size_t x = 0; x < columns; ++x) {
       unsigned char pixels[27];
-      MagickGetImagePixels(wand, x + x_offset, y + y_offset, 1, 1, "RGBA", CharPixel, pixels);
+      MagickGetImagePixels(wand, x, y , 1, 1, "RGBA", CharPixel, pixels);
      offscreen_canvas->SetPixel(x + x_offset, y + y_offset, pixels[0], pixels[1], pixels[2]);
       // if (c.alphaQuantum() < 256) { // https://imagemagick.org/discourse-server/viewtopic.php?t=19581
       //   offscreen_canvas->SetPixel(x + x_offset, y + y_offset,
@@ -135,9 +136,10 @@ void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas) {
 void *LoadFile(void *inParam) {
   setThreadPriority(3, (1 << 2));
 
-  FileCollection *collection = (FileCollection *)inParam;
-    fprintf(stderr, "LOAD FILE, got %d files, run until we got %d\n", collection->loadedFiles.size(), collection->visibleImages * 2);
-  while (collection->loadedFiles.size() < collection->visibleImages * 2) {
+  Sequence  *sequence = (Sequence *)inParam;
+  FileCollection *collection = sequence->nextCollection();
+    fprintf(stderr, "LOAD FILE, got %d files, run until we got %d\n", collection->loadedFiles.size(), sequence->nextCollectionTargetSize());
+  while (collection->loadedFiles.size() < sequence->nextCollectionTargetSize()) {
     MagickWand  *tempWand=NewMagickWand();
     int count = 0;
     int maxTries = 3;
@@ -165,32 +167,12 @@ void *LoadFile(void *inParam) {
         }
       }
     }
-  //   int frameCount = 0;
-  //   MagickResetIterator(tempWand);
-  //   while (MagickNextImage(tempWand)  != MagickFalse) {
-  //    unsigned long columns, rows;
-  //    MagickGetSize(tempWand, &columns, &rows);
-  //    fprintf(stderr, "==TMP %lu x %lu == %lu x %lu \n", columns, rows, MagickGetImageWidth(tempWand), MagickGetImageHeight(tempWand));
-  //    frameCount++;
-  //  }
-  //  fprintf(stderr, "TMP Frame count for %s: %d\n", collection->loadedFiles.back()->filename, frameCount);
-
 
     collection->loadedFiles.back()->wand = MagickCoalesceImages(tempWand);
     MagickResetIterator(collection->loadedFiles.back()->wand);
-//   frameCount = 0;
-
-  //  while (MagickNextImage(collection->loadedFiles.back()->wand) != MagickFalse) {
-  //    unsigned long columns, rows;
-  //    MagickGetSize(collection->loadedFiles.back()->wand, &columns, &rows);
-  //    fprintf(stderr, "%lu x %lu", columns, rows);
-  //    frameCount++;
-  //  }
-  //  fprintf(stderr, "Frame count for %s: %d\n", collection->loadedFiles.back()->filename, frameCount);
 
     DestroyMagickWand(tempWand);
   }
-
   pthread_exit((void *)0);
 }
 

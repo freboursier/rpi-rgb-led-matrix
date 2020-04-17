@@ -24,6 +24,9 @@ class Sequence {
     const char *name;
     int     displayTime; // Display time in seconds
 
+unsigned int nextCollectionTargetSize();
+bool    nextCollectionIsReady();
+
     private:
           unsigned int nextCollectionIdx = 0;
           int currentCollectionIdx = -1;

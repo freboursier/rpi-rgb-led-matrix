@@ -58,17 +58,32 @@ FileCollection *Sequence::nextCollection() {
 }
 
 void Sequence::forwardCollection() {
-  if (currentCollection() != NULL) {
-      fprintf(stderr, "About to DELETE %d loaded files\n", currentCollection()->loadedFiles.size());
-    for (auto &loadedFile : currentCollection()->loadedFiles) {
-    //    loadedFile->frames.clear();
-        delete loadedFile;
-    }
-    fprintf(stderr, "About to clear %d loaded files", currentCollection()->loadedFiles.size());
-    currentCollection()->loadedFiles.clear();
+  FileCollection  *current = currentCollection();
+  if (current != NULL) {
+      fprintf(stderr, "About to DELETE %d loaded files\n", current->visibleImages);
+      for (int i = 0; i < current->visibleImages; i++) {
+        delete current->loadedFiles[i];
+      }
+      current->loadedFiles.erase(current->loadedFiles.begin(), current->loadedFiles.begin() + current->visibleImages);
   }
   
   currentCollectionIdx = nextCollectionIdx;
   nextCollectionIdx = (nextCollectionIdx + 1) % collections.size();
   fprintf(stderr, "FWD, new collection is %s\n", currentCollection()->regex);
+}
+
+// The next collection should contains this many LoadedFile to be shown
+unsigned int Sequence::nextCollectionTargetSize()
+{
+  if (collections.size() == 1)
+  {
+    return nextCollection()->visibleImages * 2;
+  }
+//  fprintf(stderr, "nextCollectionTargetSize(), need %d images for %s", nextCollection()->visibleImages, nextCollection()->regex);
+  return nextCollection()->visibleImages;
+}
+
+
+bool    Sequence::nextCollectionIsReady() { 
+  return nextCollectionTargetSize() == nextCollection()->loadedFiles.size();
 }

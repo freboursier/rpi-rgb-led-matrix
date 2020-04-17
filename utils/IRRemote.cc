@@ -18,7 +18,7 @@ void *MonitorIRRemote(void *inParam) {
   int fd, rd;
   unsigned int i;
   struct input_event ev[64];
-
+  RGBMatrix *matrix = (RGBMatrix *)inParam;
   const char *inputDevice = "/dev/input/event0";
   if ((fd = open(inputDevice, O_RDONLY)) < 0) {
     perror("Failed to open IR event source");

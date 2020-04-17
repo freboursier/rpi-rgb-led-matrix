@@ -64,8 +64,8 @@ using rgb_matrix::FrameCanvas;
 using rgb_matrix::GPIO;
 using rgb_matrix::RGBMatrix;
 using rgb_matrix::StreamReader;
+using std::tuple;
 
-RGBMatrix *matrix;
 char gl_infoMessage[INFO_MESSAGE_LENGTH];
 time_t gl_infotimeout = 0;
 
@@ -77,19 +77,14 @@ void scheduleInfoMessage() { gl_infotimeout = time(0) + 3; }
 void displayLoop(RGBMatrix *matrix) {
   FrameCanvas *offscreen_canvas = matrix->CreateFrameCanvas();
   pthread_t workerThread = 0;
-  pthread_t remoteControlThread = 0;
+
   bool shouldChangeCollection = false;
   Sequence *seq = gl_sequences.front();
   fprintf(stderr, "%d collections available\n", seq->collections.size());
 
-  // int frameCount = 0;
-
   std::vector<LoadedFile *> *currentImages;
 
-  int ret = pthread_create(&remoteControlThread, NULL, MonitorIRRemote, NULL);
-  if (ret) {
-    printf("Failed to create Remote control thread\n");
-  }
+
 
   Font statusFont;
   if (!statusFont.LoadFont("../fonts/10x20.bdf")) {
@@ -101,9 +96,10 @@ void displayLoop(RGBMatrix *matrix) {
 
     tmillis_t frame_start = GetTimeInMillis();
 
-    if (workerThread == 0 && seq->nextCollection()->loadedFiles.size() < seq->nextCollection()->visibleImages * 2) {
+    if (workerThread == 0 && false == seq->nextCollectionIsReady()) { // seq->nextCollection()->loadedFiles.size() < seq->nextCollection()->visibleImages * 2) {
       fprintf(stderr, " => %d loaded files in collection %s, need %d\n", seq->nextCollection()->loadedFiles.size(), seq->nextCollection()->regex, seq->nextCollection()->visibleImages);
-      int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)(seq->nextCollection()));
+
+      int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)seq);
       if (ret) {
         printf("Failed to create worker thread\n");
       }
@@ -112,7 +108,7 @@ void displayLoop(RGBMatrix *matrix) {
     if (workerThread) {
       void *threadRetval = NULL;
       if (0 == pthread_tryjoin_np(workerThread, &threadRetval)) {
-        fprintf(stderr, "\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
+        //fprintf(stderr, "\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
         workerThread = 0;
         if (seq->currentCollection() == NULL) {
           seq->forwardCollection();
@@ -121,14 +117,23 @@ void displayLoop(RGBMatrix *matrix) {
         }
       }
     }
-    if (shouldChangeCollection == true && seq->nextCollection()->loadedFiles.size() >= seq->nextCollection()->visibleImages * 2 && workerThread == 0) {
+    if (shouldChangeCollection == true && seq->nextCollectionIsReady() && workerThread == 0) {
       seq->forwardCollection();
       currentImages = &(seq->currentCollection()->loadedFiles);
       seq->currentCollection()->displayStartTime = GetTimeInMillis();
     }
 
     shouldChangeCollection = false;
-    if (seq->currentCollection() != NULL) {
+     if (seq->currentCollection() == NULL) {
+            rgb_matrix::Color red = {.r = 255, .g = 0, .b = 0};
+            char *message = NULL;
+            asprintf(&message, "Loading %s", seq->name);
+                    fprintf(stderr, "Show loading /%s/", message);
+
+            DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), {.r = 255, .g = 255, .b = 255}, &red, message, 0);
+          offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+
+      }  else {
       bool shouldChangeDisplay = false;
 
       for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
@@ -139,9 +144,9 @@ void displayLoop(RGBMatrix *matrix) {
         }
       }
 
-      if (shouldChangeDisplay) {
+     if (shouldChangeDisplay) {
         if (seq->currentCollection()->displayDuration > 0 && GetTimeInMillis() - seq->currentCollection()->displayStartTime > (seq->currentCollection()->displayDuration * 1000)) {
-          fprintf(stderr, "\033[0;34mTime is up for current collection, should move to next \033\n", 42);
+          fprintf(stderr, "\033[0;34mTime is up for current collection, should move to next \033\n");
           shouldChangeCollection = true;
         }
  
@@ -153,7 +158,7 @@ void displayLoop(RGBMatrix *matrix) {
             if (MagickNextImage((*currentImages)[i]->wand) == MagickFalse) {
               MagickResetIterator((*currentImages)[i]->wand);
               if (seq->currentCollection()->displayDuration == 0) {
-                fprintf(stderr, "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n", 42); // simplifier: faire ce code après les affichage
+                fprintf(stderr, "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n"); // simplifier: faire ce code après les affichage
                                                                                                                        // pour se débarasser du shouldChangeCollection et
                                                                                                                        // forweard() après les blitz a l'écran
                 shouldChangeCollection = true;
@@ -167,6 +172,7 @@ void displayLoop(RGBMatrix *matrix) {
                 delay_time_us = 50 * 1000; // single image.
             } else if (delay_time_us < 0) {
                 delay_time_us = 100 * 1000; // 1/10sec
+                 fprintf(stderr, "CRAPPY TIMING USE DEFAULT");
             }
 
             (*currentImages)[i]->nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
@@ -193,13 +199,14 @@ void displayLoop(RGBMatrix *matrix) {
     tmillis_t next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
     SleepMillis(next_frame - frame_start);
 
-    //    frameCount++;
   }
 }
 
 int main(int argc, char *argv[]) {
   srand(time(0));
   InitializeMagick(*argv);
+  pthread_t remoteControlThread = 0;
+    
   RGBMatrix::Options matrix_options;
   rgb_matrix::RuntimeOptions runtime_opt;
   if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_opt)) {
@@ -286,7 +293,7 @@ int main(int argc, char *argv[]) {
   }
 
   runtime_opt.do_gpio_init = (stream_output == NULL);
-  matrix = CreateMatrixFromOptions(matrix_options, runtime_opt);
+  RGBMatrix *matrix = CreateMatrixFromOptions(matrix_options, runtime_opt);
   if (matrix == NULL) {
     fprintf(stderr, "Fatal: Failed to create matrix\n");
     return 1;
@@ -298,6 +305,11 @@ int main(int argc, char *argv[]) {
 
   signal(SIGTERM, InterruptHandler);
   signal(SIGINT, InterruptHandler);
+
+  int ret = pthread_create(&remoteControlThread, NULL, MonitorIRRemote, (void *)matrix);
+  if (ret) {
+    printf("Failed to create Remote control thread\n");
+  }
 
   displayLoop(matrix);
 
