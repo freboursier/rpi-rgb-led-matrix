@@ -65,6 +65,7 @@ using rgb_matrix::FrameCanvas;
 using rgb_matrix::GPIO;
 using rgb_matrix::RGBMatrix;
 using rgb_matrix::StreamReader;
+using rgb_matrix::Color;
 
 char gl_infoMessage[INFO_MESSAGE_LENGTH];
 time_t gl_infotimeout = 0;
@@ -85,6 +86,34 @@ void goToNextSequence() {
   next_sequence_received = false;
 }
 
+void drawBrightness(RGBMatrix *matrix, FrameCanvas *offscreen_canvas) {
+
+  int totalWidth = 15;
+  int textAreaHeight = 12;
+  int width = totalWidth;
+  int borderSize = 2;
+
+    int originX = matrix->width() - (width + borderSize);
+    int originY = borderSize;
+
+
+  Color blackColor = {.r = 0, .g = 0, .b = 0};
+Color whiteColor = {.r = 255, .g = 255, .b = 255};
+Color lightGrey = {.r = 192, .g = 192, .b = 192};
+
+int height = matrix->height() - borderSize * 2;
+
+ DrawRectangle(offscreen_canvas, originX, originY, width, height, blackColor);
+
+  height = height - textAreaHeight - borderSize;
+
+ DrawRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight, width - borderSize * 2, height, lightGrey);
+
+ int enabledHeight = height * matrix->brightness() / 100.0;
+
+DrawRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight + (height - enabledHeight), width - borderSize * 2, enabledHeight, whiteColor);
+}
+
 void displayLoop(RGBMatrix *matrix) {
   FrameCanvas *offscreen_canvas = matrix->CreateFrameCanvas();
   pthread_t workerThread = 0;
@@ -93,7 +122,9 @@ void displayLoop(RGBMatrix *matrix) {
   std::vector<LoadedFile *> *currentImages;
 
   Font statusFont;
-  if (!statusFont.LoadFont("../fonts/10x20.bdf")) {
+  
+  if (!statusFont.LoadFont("../fonts/9x18B.bdf")) {
+  //if (!statusFont.LoadFont("../fonts/10x20.bdf")) {
     fprintf(stderr, "Couldn't load font \n");
     exit(1);
   }
@@ -126,9 +157,10 @@ void displayLoop(RGBMatrix *matrix) {
         if (seq->currentCollection() == NULL && (int)threadRetval == 0) {
           seq->forwardCollection();
           currentImages = &(seq->currentCollection()->loadedFiles);
-          seq->currentCollection()->displayStartTime = GetTimeInMillis();
+          seq->currentCollection()->displayStartTime = GetTimeInMillis()/* + 3 * 1000*/;
         } else if (threadRetval == PTHREAD_CANCELED) {
           fprintf(stderr, "## Thread has been canceled, go to next sequence");
+          goToNextSequence();
         }
       }
     }
@@ -138,20 +170,13 @@ void displayLoop(RGBMatrix *matrix) {
       seq->currentCollection()->displayStartTime = GetTimeInMillis();
     }
 
-    if (seq->currentCollection() == NULL) {
-      // rgb_matrix::Color red = {.r = 255, .g = 0, .b = 0};
+    if (seq->currentCollection() == NULL || seq->currentCollection()->displayStartTime > GetTimeInMillis()) {
 
-      // matrix->Clear();
-      // DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), {.r = 255, .g = 255, .b = 255}, &red, seq->name, 0);
-      // offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
       rgb_matrix::Color backgroundColor = {.r = 0, .g = 87, .b = 146};
       int textWidth = DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), backgroundColor, &backgroundColor, seq->name, 0);
-      // matrix->Clear();
 
       matrix->Fill(backgroundColor.r, backgroundColor.g, backgroundColor.b);
-     // fprintf(stderr, "Draw %s\n", seq->name);
-      DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, 0 + statusFont.baseline(), {.r = 253, .g = 95, .b = 0}, &backgroundColor, seq->name, 0);
-      // offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+      DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, {.r = 253, .g = 95, .b = 0}, &backgroundColor, seq->name, 0);
     } else {
       shouldChangeCollection = false;
       bool shouldChangeDisplay = false;
@@ -212,12 +237,15 @@ void displayLoop(RGBMatrix *matrix) {
         //  offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
       }
     }
+    drawBrightness(matrix, offscreen_canvas);
     offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
     tmillis_t ellapsedTime = GetTimeInMillis() - frame_start;
     tmillis_t next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
     SleepMillis(next_frame - frame_start);
   }
 }
+
+
 
 int main(int argc, char *argv[]) {
   srand(time(0));
