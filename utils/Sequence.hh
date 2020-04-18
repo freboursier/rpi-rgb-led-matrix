@@ -26,6 +26,7 @@ class Sequence {
 
 unsigned int nextCollectionTargetSize();
 bool    nextCollectionIsReady();
+void    reset();
 
     private:
           unsigned int nextCollectionIdx = 0;

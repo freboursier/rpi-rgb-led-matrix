@@ -57,6 +57,18 @@ FileCollection *Sequence::nextCollection() {
   return collections[nextCollectionIdx];
 }
 
+void  Sequence::reset() {
+  fprintf(stderr, "Reset sequence %s\n", name);
+  currentCollectionIdx = -1;
+  nextCollectionIdx = 0;
+  for (auto &collection : collections) {
+    for (auto &loadedFile : collection->loadedFiles) {
+      delete loadedFile;
+    }
+    collection->loadedFiles.clear();
+  }
+}
+
 void Sequence::forwardCollection() {
   FileCollection  *current = currentCollection();
   if (current != NULL) {

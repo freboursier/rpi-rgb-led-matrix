@@ -112,12 +112,6 @@ void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas,
       unsigned char pixels[27];
       MagickGetImagePixels(wand, x, y , 1, 1, "RGBA", CharPixel, pixels);
      offscreen_canvas->SetPixel(x + x_offset, y + y_offset, pixels[0], pixels[1], pixels[2]);
-      // if (c.alphaQuantum() < 256) { // https://imagemagick.org/discourse-server/viewtopic.php?t=19581
-      //   offscreen_canvas->SetPixel(x + x_offset, y + y_offset,
-      //                              ScaleQuantumToChar(c.redQuantum()),
-      //                              ScaleQuantumToChar(c.greenQuantum()),
-      //                              ScaleQuantumToChar(c.blueQuantum()));
-      // }
     }
   }
 }
@@ -147,7 +141,7 @@ void *LoadFile(void *inParam) {
       int randCount = rand() % collection->filePaths.size();
       const char *imagePath = collection->filePaths[randCount];
       try {
-        fprintf(stderr, "Attempt to load >%s<\n", imagePath);
+//        fprintf(stderr, "Attempt to load >%s<\n", imagePath);
         if (MagickReadImage(tempWand,imagePath) == MagickFalse) {
           fprintf(stderr, "Failed to read image at %s\n", imagePath);
         } 

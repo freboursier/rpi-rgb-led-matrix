@@ -57,6 +57,7 @@
 
 std::vector<const char *> gl_filenames;
 std::vector<Sequence *> gl_sequences;
+int gl_sequence_index = 0;
 
 using rgb_matrix::Canvas;
 using rgb_matrix::Font;
@@ -64,27 +65,32 @@ using rgb_matrix::FrameCanvas;
 using rgb_matrix::GPIO;
 using rgb_matrix::RGBMatrix;
 using rgb_matrix::StreamReader;
-using std::tuple;
 
 char gl_infoMessage[INFO_MESSAGE_LENGTH];
 time_t gl_infotimeout = 0;
 
 volatile bool interrupt_received = false;
+volatile bool next_sequence_received = false;
 static void InterruptHandler(int signo) { interrupt_received = true; }
 
 void scheduleInfoMessage() { gl_infotimeout = time(0) + 3; }
+
+void goToNextSequence() {
+  fprintf(stderr, "Select next sequence, current is %s\n", gl_sequences[gl_sequence_index]->name);
+  int nextSequenceIndex = (gl_sequence_index + 1) % gl_sequences.size();
+  if (nextSequenceIndex != gl_sequence_index) {
+    gl_sequences[gl_sequence_index]->reset();
+    gl_sequence_index = nextSequenceIndex;
+  }
+  next_sequence_received = false;
+}
 
 void displayLoop(RGBMatrix *matrix) {
   FrameCanvas *offscreen_canvas = matrix->CreateFrameCanvas();
   pthread_t workerThread = 0;
 
   bool shouldChangeCollection = false;
-  Sequence *seq = gl_sequences.front();
-  fprintf(stderr, "%d collections available\n", seq->collections.size());
-
   std::vector<LoadedFile *> *currentImages;
-
-
 
   Font statusFont;
   if (!statusFont.LoadFont("../fonts/10x20.bdf")) {
@@ -93,27 +99,36 @@ void displayLoop(RGBMatrix *matrix) {
   }
 
   while (!interrupt_received) {
-
+    if (next_sequence_received) {
+      if (workerThread != 0) {
+        pthread_cancel(workerThread);
+        workerThread = 0;
+      } else {
+        goToNextSequence();
+    }
+    }
     tmillis_t frame_start = GetTimeInMillis();
-
-    if (workerThread == 0 && false == seq->nextCollectionIsReady()) { // seq->nextCollection()->loadedFiles.size() < seq->nextCollection()->visibleImages * 2) {
+    Sequence *seq = gl_sequences[gl_sequence_index];
+    if (workerThread == 0 && false == seq->nextCollectionIsReady()) {
       fprintf(stderr, " => %d loaded files in collection %s, need %d\n", seq->nextCollection()->loadedFiles.size(), seq->nextCollection()->regex, seq->nextCollection()->visibleImages);
 
       int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)seq);
       if (ret) {
-        printf("Failed to create worker thread\n");
+        printf("Failed to create worker thread : %d\n", ret);
       }
     }
 
     if (workerThread) {
       void *threadRetval = NULL;
       if (0 == pthread_tryjoin_np(workerThread, &threadRetval)) {
-        //fprintf(stderr, "\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
+        fprintf(stderr, "\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
         workerThread = 0;
-        if (seq->currentCollection() == NULL) {
+        if (seq->currentCollection() == NULL && (int)threadRetval == 0) {
           seq->forwardCollection();
           currentImages = &(seq->currentCollection()->loadedFiles);
           seq->currentCollection()->displayStartTime = GetTimeInMillis();
+        } else if (threadRetval == PTHREAD_CANCELED) {
+          fprintf(stderr, "## Thread has been canceled, go to next sequence");
         }
       }
     }
@@ -123,17 +138,22 @@ void displayLoop(RGBMatrix *matrix) {
       seq->currentCollection()->displayStartTime = GetTimeInMillis();
     }
 
-    shouldChangeCollection = false;
-     if (seq->currentCollection() == NULL) {
-            rgb_matrix::Color red = {.r = 255, .g = 0, .b = 0};
-            char *message = NULL;
-            asprintf(&message, "Loading %s", seq->name);
-                    fprintf(stderr, "Show loading /%s/", message);
+    if (seq->currentCollection() == NULL) {
+      // rgb_matrix::Color red = {.r = 255, .g = 0, .b = 0};
 
-            DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), {.r = 255, .g = 255, .b = 255}, &red, message, 0);
-          offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+      // matrix->Clear();
+      // DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), {.r = 255, .g = 255, .b = 255}, &red, seq->name, 0);
+      // offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+      rgb_matrix::Color backgroundColor = {.r = 0, .g = 87, .b = 146};
+      int textWidth = DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), backgroundColor, &backgroundColor, seq->name, 0);
+      // matrix->Clear();
 
-      }  else {
+      matrix->Fill(backgroundColor.r, backgroundColor.g, backgroundColor.b);
+     // fprintf(stderr, "Draw %s\n", seq->name);
+      DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, 0 + statusFont.baseline(), {.r = 253, .g = 95, .b = 0}, &backgroundColor, seq->name, 0);
+      // offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+    } else {
+      shouldChangeCollection = false;
       bool shouldChangeDisplay = false;
 
       for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
@@ -144,12 +164,12 @@ void displayLoop(RGBMatrix *matrix) {
         }
       }
 
-     if (shouldChangeDisplay) {
+      if (shouldChangeDisplay) {
         if (seq->currentCollection()->displayDuration > 0 && GetTimeInMillis() - seq->currentCollection()->displayStartTime > (seq->currentCollection()->displayDuration * 1000)) {
           fprintf(stderr, "\033[0;34mTime is up for current collection, should move to next \033\n");
           shouldChangeCollection = true;
         }
- 
+
         for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
 
           bool needFrameChange = GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
@@ -159,8 +179,8 @@ void displayLoop(RGBMatrix *matrix) {
               MagickResetIterator((*currentImages)[i]->wand);
               if (seq->currentCollection()->displayDuration == 0) {
                 fprintf(stderr, "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n"); // simplifier: faire ce code après les affichage
-                                                                                                                       // pour se débarasser du shouldChangeCollection et
-                                                                                                                       // forweard() après les blitz a l'écran
+                                                                                                                   // pour se débarasser du shouldChangeCollection et
+                                                                                                                   // forweard() après les blitz a l'écran
                 shouldChangeCollection = true;
               }
             }
@@ -169,17 +189,16 @@ void displayLoop(RGBMatrix *matrix) {
           if (needFrameChange) {
             int64_t delay_time_us = MagickGetImageDelay((*currentImages)[i]->wand);
             if (delay_time_us == 0) {
-                delay_time_us = 50 * 1000; // single image.
+              delay_time_us = 50 * 1000; // single image.
             } else if (delay_time_us < 0) {
-                delay_time_us = 100 * 1000; // 1/10sec
-                 fprintf(stderr, "CRAPPY TIMING USE DEFAULT");
+              delay_time_us = 100 * 1000; // 1/10sec
+              fprintf(stderr, "CRAPPY TIMING USE DEFAULT");
             }
 
             (*currentImages)[i]->nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
           }
-          
-                    blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i]->wand, i, seq->currentCollection()->screenMode);
-                                       
+
+          blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i]->wand, i, seq->currentCollection()->screenMode);
         }
         if (seq->currentCollection()->screenMode == Cross) {
           drawCross(matrix, offscreen_canvas);
@@ -187,18 +206,16 @@ void displayLoop(RGBMatrix *matrix) {
 
         if (time(0) < gl_infotimeout) {
           rgb_matrix::Color blackColor = {.r = 0, .g = 0, .b = 0};
-
           DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), {.r = 255, .g = 255, .b = 255}, &blackColor, gl_infoMessage, 0);
         }
 
-        offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+        //  offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
       }
     }
-
+    offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
     tmillis_t ellapsedTime = GetTimeInMillis() - frame_start;
     tmillis_t next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
     SleepMillis(next_frame - frame_start);
-
   }
 }
 
@@ -206,7 +223,7 @@ int main(int argc, char *argv[]) {
   srand(time(0));
   InitializeMagick(*argv);
   pthread_t remoteControlThread = 0;
-    
+
   RGBMatrix::Options matrix_options;
   rgb_matrix::RuntimeOptions runtime_opt;
   if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_opt)) {
@@ -310,7 +327,7 @@ int main(int argc, char *argv[]) {
   if (ret) {
     printf("Failed to create Remote control thread\n");
   }
-
+  gl_sequence_index = 0;
   displayLoop(matrix);
 
   matrix->Clear();

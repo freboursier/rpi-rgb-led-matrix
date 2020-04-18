@@ -20,5 +20,6 @@ static const tmillis_t distant_future = (1LL<<40); // that is a while.
 
 
 void scheduleInfoMessage();
+void    goToNextSequence();
 
 #endif

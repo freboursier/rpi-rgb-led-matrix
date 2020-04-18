@@ -11,9 +11,9 @@
 #define BRIGHTNESS_INCREMENT 5
 #define INFO_MESSAGE_LENGTH 30
 
-extern RGBMatrix *matrix;
 extern  char gl_infoMessage[INFO_MESSAGE_LENGTH];
-
+extern bool next_sequence_received;
+  
 void *MonitorIRRemote(void *inParam) {
   int fd, rd;
   unsigned int i;
@@ -93,6 +93,7 @@ void *MonitorIRRemote(void *inParam) {
           break;
         }
         case KEY_RIGHT: {
+          next_sequence_received = true;
           break;
         }
         case KEY_OK: {
