@@ -116,8 +116,6 @@ void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas) {
 }
 
 void *LoadFile(void *inParam) {
-  //  setThreadPriority(3, (1 << 2));
-
   Sequence *sequence = (Sequence *)inParam;
   FileCollection *collection = sequence->nextCollection();
   fprintf(stderr, "LOAD FILE, got %d files, run until we got %d\n", collection->loadedFiles.size(), sequence->nextCollectionTargetSize());
@@ -125,20 +123,14 @@ void *LoadFile(void *inParam) {
     MagickWand *tempWand = NewMagickWand();
     int count = 0;
     int maxTries = 3;
+    const char *imagePath = NULL;
     while (true) {
       int randCount = rand() % collection->filePaths.size();
-      const char *imagePath = collection->filePaths[randCount];
+      imagePath = collection->filePaths[randCount];
       try {
-        //        fprintf(stderr, "Attempt to load >%s<\n", imagePath);
         if (MagickReadImage(tempWand, imagePath) == MagickFalse) {
           fprintf(stderr, "Failed to read image at %s\n", imagePath);
         }
-        LoadedFile *loadedFile = new LoadedFile();
-
-        loadedFile->filename = imagePath;
-        loadedFile->nextFrameTime = GetTimeInMillis();
-        collection->loadedFiles.push_back(loadedFile);
-
         break;
       } catch (std::exception &e) {
         fprintf(stderr, "Failed to load file: %s", e.what());
@@ -148,10 +140,8 @@ void *LoadFile(void *inParam) {
         }
       }
     }
-
-    collection->loadedFiles.back()->wand = MagickCoalesceImages(tempWand);
-    MagickResetIterator(collection->loadedFiles.back()->wand);
-
+    LoadedFile *loadedFile = new LoadedFile(imagePath, MagickCoalesceImages(tempWand));
+    collection->loadedFiles.push_back(loadedFile);
     DestroyMagickWand(tempWand);
   }
   pthread_exit((void *)0);
@@ -179,4 +169,30 @@ void FillRectangle(FrameCanvas *canvas, int x0, int y0, int width, int height, c
       canvas->SetPixel(x, y, color.r, color.g, color.b);
     }
   }
+}
+
+int  getFilenamesFromDirectory(std::vector<const char *> *filenames, char *gifDirectory)
+{
+   DIR *gifDir = opendir(gifDirectory);
+  if (gifDir == NULL) {
+    fprintf(stderr, "Cannot open gif directory %s\n", gifDirectory);
+    return 0;
+  }
+  errno = 0;
+
+  while (1) {
+    struct dirent *entry = readdir(gifDir);
+    if (entry == NULL && errno == 0) {
+      break;
+    }
+
+    if (isValidDirent(entry)) {
+      int mallocSize = sizeof(char) * (strlen(gifDirectory) + strlen(entry->d_name) + 2);
+      char *filePath = (char *)malloc(mallocSize);
+      sprintf(filePath, "%s/%s", gifDirectory, entry->d_name);
+      filenames->push_back(filePath);
+    }
+    errno = 0;
+  }
+  return 1;
 }

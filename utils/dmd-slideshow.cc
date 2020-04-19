@@ -53,9 +53,8 @@
 #define DEBUG 0
 #define BRIGHTNESS_DISPLAY_DURATION 3
 #define FRAME_PER_SECOND 30
-#define INFO_MESSAGE_LENGTH 30
+#define DEFAULT_DISPLAY_DURATION 10
 
-std::vector<const char *> gl_filenames;
 std::vector<Sequence *> gl_sequences;
 int gl_sequence_index = 0;
 
@@ -67,21 +66,21 @@ using rgb_matrix::GPIO;
 using rgb_matrix::RGBMatrix;
 using rgb_matrix::StreamReader;
 
-char gl_infoMessage[INFO_MESSAGE_LENGTH];
 time_t gl_brightness_timeout = 0;
 
 volatile bool interrupt_received = false;
 volatile bool next_sequence_received = false;
-static void InterruptHandler(int signo) { interrupt_received = true; }
+static void InterruptHandler(int signo) {
+  interrupt_received = true;
+}
 
-void changeBrightnessLevel(RGBMatrix *matrix, int newLevel)
-{
-   gl_brightness_timeout = time(0) + BRIGHTNESS_DISPLAY_DURATION; 
-   matrix->SetBrightness(newLevel);
+void changeBrightnessLevel(RGBMatrix *matrix, int newLevel) {
+  gl_brightness_timeout = time(0) + BRIGHTNESS_DISPLAY_DURATION;
+  matrix->SetBrightness(newLevel);
 }
 
 void goToNextSequence() {
-  fprintf(stderr, "Select next sequence, current is %s\n", gl_sequences[gl_sequence_index]->name);
+  fprintf(stderr, "Select next sequence, current is %s\n", gl_sequences[gl_sequence_index]->name());
   int nextSequenceIndex = (gl_sequence_index + 1) % gl_sequences.size();
   if (nextSequenceIndex != gl_sequence_index) {
     gl_sequences[gl_sequence_index]->reset();
@@ -199,16 +198,14 @@ void displayLoop(RGBMatrix *matrix) {
         Color backgroundColor = {.r = 241, .g = 172, .b = 71};
         Color blackColor = {.r = 0, .g = 0, .b = 0};
 
-        int textWidth = DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), blackColor, NULL, seq->name, 0);
+        int textWidth = DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), blackColor, NULL, seq->name(), 0);
 
         FillRectangle(offscreen_canvas, 0, 0, matrix->width(), matrix->height(), backgroundColor);
-        DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2 + 1, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2 + 1, blackColor, NULL, seq->name, 0);
+        DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2 + 1, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2 + 1, blackColor, NULL, seq->name(), 0);
 
-        DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, {.r = 255, .g = 255, .b = 255}, NULL, seq->name, 0);
+        DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, {.r = 255, .g = 255, .b = 255}, NULL,
+                 seq->name(), 0);
 
-        // DrawText(offscreen_canvas, *statusFontOutline, (matrix->width() - textWidth) / 2 - 1, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, blackColor, NULL, seq->name, -2);
-        // DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, {.r = 253, .g = 95, .b = 0}, NULL, seq->name,
-        //          0);
         shouldRedrawSequenceName = false;
         dirtyCanvas = true;
       }
@@ -232,34 +229,29 @@ void displayLoop(RGBMatrix *matrix) {
         }
 
         for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
-
           bool needFrameChange = GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
 
           if (needFrameChange) {
-            if (MagickNextImage((*currentImages)[i]->wand) == MagickFalse) {
-              MagickResetIterator((*currentImages)[i]->wand);
+            if (MagickNextImage((*currentImages)[i]->wand()) == MagickFalse) {
+              MagickResetIterator((*currentImages)[i]->wand());
               if (seq->currentCollection()->displayDuration == 0) {
-                fprintf(stderr, "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n"); // simplifier: faire ce code après les affichage
-                                                                                                                   // pour se débarasser du shouldChangeCollection et
-                                                                                                                   // forweard() après les blitz a l'écran
+                fprintf(stderr, "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n"); 
                 shouldChangeCollection = true;
               }
             }
           }
 
           if (needFrameChange) {
-            int64_t delay_time_us = MagickGetImageDelay((*currentImages)[i]->wand);
+            int64_t delay_time_us = MagickGetImageDelay((*currentImages)[i]->wand());
             if (delay_time_us == 0) {
               delay_time_us = 50 * 1000; // single image.
             } else if (delay_time_us < 0) {
               delay_time_us = 100 * 1000; // 1/10sec
               fprintf(stderr, "CRAPPY TIMING USE DEFAULT");
             }
-
             (*currentImages)[i]->nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
           }
-
-          blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i]->wand, i, seq->currentCollection()->screenMode);
+          blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i]->wand(), i, seq->currentCollection()->screenMode);
         }
         if (seq->currentCollection()->screenMode == Cross) {
           drawCross(matrix, offscreen_canvas);
@@ -287,24 +279,24 @@ int main(int argc, char *argv[]) {
   srand(time(0));
   InitializeMagick(*argv);
   pthread_t remoteControlThread = 0;
+  std::vector<const char *> gl_filenames = std::vector<const char *>();
 
   RGBMatrix::Options matrix_options;
   rgb_matrix::RuntimeOptions runtime_opt;
   if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_opt)) {
     return usage(argv[0]);
   }
-  int displayDuration = 10;
+  int displayDuration = DEFAULT_DISPLAY_DURATION;
 
   const char *stream_output = NULL;
-  char *gifDirectory = NULL;
   int opt;
-  while ((opt = getopt(argc, argv, "w:t:l:c:P:hO:d:c:f:s:")) != -1) {
+  while ((opt = getopt(argc, argv, "w:c:hd:c:f:s:")) != -1) {
     switch (opt) {
     case 'w':
       displayDuration = atoi(optarg);
       break;
     case 'd':
-      gifDirectory = optarg;
+      getFilenamesFromDirectory(&gl_filenames, optarg);
       break;
     case 'c': {
       FileCollection *newCollection = new FileCollection();
@@ -324,12 +316,8 @@ int main(int argc, char *argv[]) {
       newCollection->visibleImages = 1;
       gl_sequences.back()->collections.push_back(newCollection);
     } break;
-    case 'P':
-      matrix_options.parallel = atoi(optarg);
-      break;
     case 's': {
-      Sequence *newSequence = new Sequence();
-      newSequence->name = optarg;
+      Sequence *newSequence = new Sequence(optarg);
       gl_sequences.push_back(newSequence);
     } break;
     case 'h':
@@ -337,38 +325,10 @@ int main(int argc, char *argv[]) {
       return usage(argv[0]);
     }
   }
-
-  DIR *gifDir = opendir(gifDirectory);
-  if (gifDir == NULL) {
-    fprintf(stderr, "Cannot open gif directory %s\n", gifDirectory);
-    return 1;
-  }
-  errno = 0;
-
-  while (1) {
-    struct dirent *entry = readdir(gifDir);
-    if (entry == NULL && errno == 0) {
-      break;
-    }
-
-    if (isValidDirent(entry)) {
-      int mallocSize = sizeof(char) * (strlen(gifDirectory) + strlen(entry->d_name) + 2);
-      char *filePath = (char *)malloc(mallocSize);
-      sprintf(filePath, "%s/%s", gifDirectory, entry->d_name);
-      gl_filenames.push_back(filePath);
-    }
-    errno = 0;
-  }
-
+  
   fprintf(stderr, "%d valid files\n", gl_filenames.size());
-#ifdef MEGA_VERBOSE
-  for (unsigned int i = 0; i < gl_filenames.size(); i++) {
-    fprintf(stderr, ">%s<\n", gl_filenames[i]);
-  }
-#endif
 
   for (auto &sequence : gl_sequences) {
-
     sequence->loadCollections(gl_filenames);
     sequence->printContent();
   }
@@ -381,8 +341,6 @@ int main(int argc, char *argv[]) {
   }
 
   printf("Size: %dx%d. Hardware gpio mapping: %s\n", matrix->width(), matrix->height(), matrix_options.hardware_mapping);
-
-  fprintf(stderr, "%d available images\n", gl_filenames.size());
 
   signal(SIGTERM, InterruptHandler);
   signal(SIGINT, InterruptHandler);

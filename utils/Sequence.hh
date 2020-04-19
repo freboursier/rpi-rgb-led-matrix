@@ -5,32 +5,34 @@
 #include <sys/time.h>
 #include <sys/types.h>
 
-#include "dmd-slideshow.hh"
 #include "FileCollection.hh"
+#include "dmd-slideshow.hh"
 
 class Sequence {
-    public:
-        Sequence();
-        ~Sequence();
 
-        FileCollection  *currentCollection();
-        FileCollection  *nextCollection();
+public:
+  Sequence(const char *newName);
+  ~Sequence();
 
-        void        printContent();
-        void        loadCollections(std::vector<const char *> filenames);
-        void        forwardCollection();
+  FileCollection *currentCollection();
+  FileCollection *nextCollection();
 
-    std::vector<FileCollection *> collections;
-    const char *name;
-    int     displayTime; // Display time in seconds
+  void printContent();
+  void loadCollections(std::vector<const char *> filenames);
+  void forwardCollection();
 
-unsigned int nextCollectionTargetSize();
-bool    nextCollectionIsReady();
-void    reset();
+  std::vector<FileCollection *> collections;
+  int displayTime; // Display time in seconds
 
-    private:
-          unsigned int nextCollectionIdx = 0;
-          int currentCollectionIdx = -1;
+  unsigned int nextCollectionTargetSize();
+  bool nextCollectionIsReady();
+  void reset();
+  const char *name();
+
+private:
+  unsigned int nextCollectionIdx = 0;
+  int currentCollectionIdx = -1;
+  const char *_name;
 };
 
 #endif

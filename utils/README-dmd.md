@@ -4,3 +4,4 @@
 
   * pétage de plombs si on change de séquence trop vite
   * changement automatique de séquence
+  * Inclure les fonts dans les sources à la compilation

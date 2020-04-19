@@ -33,5 +33,5 @@ void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas);
 
 void FillRectangle(FrameCanvas *c, int x0, int y0, int width, int height, rgb_matrix::Color color);
 
-
+int  getFilenamesFromDirectory(std::vector<const char *> *filesames, char *gifDirectory);
 #endif

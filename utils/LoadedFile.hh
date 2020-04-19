@@ -5,12 +5,16 @@
 #include "dmd-slideshow.hh"
 
 class    LoadedFile {
+    private:
+    const char *_filename;
+    MagickWand  *_wand;
+
     public:
-    LoadedFile();
+    LoadedFile(const char *filename, MagickWand *coalescedWand);
     ~LoadedFile();
 
-    const char *filename;
-    MagickWand  *wand;
+    MagickWand  *wand();
+    const char *filename();
     tmillis_t    nextFrameTime;
 };
 
