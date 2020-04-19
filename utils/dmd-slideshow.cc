@@ -299,21 +299,11 @@ int main(int argc, char *argv[]) {
       getFilenamesFromDirectory(&gl_filenames, optarg);
       break;
     case 'c': {
-      FileCollection *newCollection = new FileCollection();
-      newCollection->screenMode = Cross;
-      newCollection->displayDuration = displayDuration;
-      newCollection->regex = optarg;
-      newCollection->loadedFiles = std::vector<LoadedFile *>();
-      newCollection->visibleImages = 4;
+      FileCollection *newCollection = new FileCollection(Cross, displayDuration, optarg);
       gl_sequences.back()->collections.push_back(newCollection);
     } break;
     case 'f': {
-      FileCollection *newCollection = new FileCollection();
-      newCollection->screenMode = FullScreen;
-      newCollection->displayDuration = displayDuration;
-      newCollection->regex = optarg;
-      newCollection->loadedFiles = std::vector<LoadedFile *>();
-      newCollection->visibleImages = 1;
+      FileCollection *newCollection = new FileCollection(FullScreen, displayDuration, optarg);
       gl_sequences.back()->collections.push_back(newCollection);
     } break;
     case 's': {
