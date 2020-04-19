@@ -31,7 +31,7 @@ void SleepMillis(tmillis_t milli_seconds);
 void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, MagickWand *wand, unsigned int position, ScreenMode screenMode);
 void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas);
 
-void DrawRectangle(FrameCanvas *c, int x0, int y0, int width, int height, rgb_matrix::Color color);
+void FillRectangle(FrameCanvas *c, int x0, int y0, int width, int height, rgb_matrix::Color color);
 
 
 #endif

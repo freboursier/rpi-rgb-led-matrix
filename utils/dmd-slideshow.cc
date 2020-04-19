@@ -60,21 +60,21 @@ std::vector<Sequence *> gl_sequences;
 int gl_sequence_index = 0;
 
 using rgb_matrix::Canvas;
+using rgb_matrix::Color;
 using rgb_matrix::Font;
 using rgb_matrix::FrameCanvas;
 using rgb_matrix::GPIO;
 using rgb_matrix::RGBMatrix;
 using rgb_matrix::StreamReader;
-using rgb_matrix::Color;
 
 char gl_infoMessage[INFO_MESSAGE_LENGTH];
-time_t gl_infotimeout = 0;
+time_t gl_brightness_timeout = 0;
 
 volatile bool interrupt_received = false;
 volatile bool next_sequence_received = false;
 static void InterruptHandler(int signo) { interrupt_received = true; }
 
-void scheduleInfoMessage() { gl_infotimeout = time(0) + 3; }
+void scheduleInfoMessage() { gl_brightness_timeout = time(0) + 3; }
 
 void goToNextSequence() {
   fprintf(stderr, "Select next sequence, current is %s\n", gl_sequences[gl_sequence_index]->name);
@@ -86,32 +86,38 @@ void goToNextSequence() {
   next_sequence_received = false;
 }
 
-void drawBrightness(RGBMatrix *matrix, FrameCanvas *offscreen_canvas) {
+void drawBrightness(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, Font *smallFont) {
 
-  int totalWidth = 15;
+  int totalWidth = 30;
   int textAreaHeight = 12;
   int width = totalWidth;
   int borderSize = 2;
+  char *level = NULL;
 
-    int originX = matrix->width() - (width + borderSize);
-    int originY = borderSize;
+  asprintf(&level, "%d%%", matrix->brightness());
 
+  int originX = matrix->width() - (width + borderSize);
+  int originY = borderSize;
 
   Color blackColor = {.r = 0, .g = 0, .b = 0};
-Color whiteColor = {.r = 255, .g = 255, .b = 255};
-Color lightGrey = {.r = 192, .g = 192, .b = 192};
+  Color whiteColor = {.r = 255, .g = 255, .b = 255};
+  Color lightGrey = {.r = 120, .g = 120, .b = 120};
 
-int height = matrix->height() - borderSize * 2;
+  int height = matrix->height() - borderSize * 2;
 
- DrawRectangle(offscreen_canvas, originX, originY, width, height, blackColor);
+  int textWidth = DrawText(offscreen_canvas, *smallFont, originX, originY + smallFont->baseline(), whiteColor, NULL, level, 0);
+
+  FillRectangle(offscreen_canvas, originX, originY, width, height, blackColor);
+
+  DrawText(offscreen_canvas, *smallFont, (totalWidth - borderSize - textWidth) / 2 + originX + borderSize, originY + smallFont->baseline() + borderSize, whiteColor, NULL, level, 0);
 
   height = height - textAreaHeight - borderSize;
 
- DrawRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight, width - borderSize * 2, height, lightGrey);
+  FillRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight, width - borderSize * 2, height, lightGrey);
 
- int enabledHeight = height * matrix->brightness() / 100.0;
+  int enabledHeight = height * matrix->brightness() / 100.0;
 
-DrawRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight + (height - enabledHeight), width - borderSize * 2, enabledHeight, whiteColor);
+  FillRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight + (height - enabledHeight), width - borderSize * 2, enabledHeight, whiteColor);
 }
 
 void displayLoop(RGBMatrix *matrix) {
@@ -119,24 +125,37 @@ void displayLoop(RGBMatrix *matrix) {
   pthread_t workerThread = 0;
 
   bool shouldChangeCollection = false;
+  bool shouldRedrawSequenceName = true;
   std::vector<LoadedFile *> *currentImages;
 
   Font statusFont;
-  
+  Font *statusFontOutline;
+  Font smallFont;
+
+  if (!smallFont.LoadFont("../fonts/6x10.bdf")) {
+    fprintf(stderr, "Couldn't load smallFont \n");
+    exit(1);
+  }
+
   if (!statusFont.LoadFont("../fonts/9x18B.bdf")) {
-  //if (!statusFont.LoadFont("../fonts/10x20.bdf")) {
     fprintf(stderr, "Couldn't load font \n");
     exit(1);
   }
 
+  statusFontOutline = statusFont.CreateOutlineFont();
+
+  bool dirtyCanvas = false;
+
   while (!interrupt_received) {
+    dirtyCanvas = false;
     if (next_sequence_received) {
       if (workerThread != 0) {
         pthread_cancel(workerThread);
         workerThread = 0;
       } else {
         goToNextSequence();
-    }
+        shouldRedrawSequenceName = true;
+      }
     }
     tmillis_t frame_start = GetTimeInMillis();
     Sequence *seq = gl_sequences[gl_sequence_index];
@@ -157,10 +176,11 @@ void displayLoop(RGBMatrix *matrix) {
         if (seq->currentCollection() == NULL && (int)threadRetval == 0) {
           seq->forwardCollection();
           currentImages = &(seq->currentCollection()->loadedFiles);
-          seq->currentCollection()->displayStartTime = GetTimeInMillis()/* + 3 * 1000*/;
+          seq->currentCollection()->displayStartTime = GetTimeInMillis() + 3 * 1000;
         } else if (threadRetval == PTHREAD_CANCELED) {
           fprintf(stderr, "## Thread has been canceled, go to next sequence");
           goToNextSequence();
+          shouldRedrawSequenceName = true;
         }
       }
     }
@@ -171,13 +191,25 @@ void displayLoop(RGBMatrix *matrix) {
     }
 
     if (seq->currentCollection() == NULL || seq->currentCollection()->displayStartTime > GetTimeInMillis()) {
+      if (shouldRedrawSequenceName == true) {
+        Color backgroundColor = {.r = 241, .g = 172, .b = 71};
+        Color blackColor = {.r = 0, .g = 0, .b = 0};
 
-      rgb_matrix::Color backgroundColor = {.r = 0, .g = 87, .b = 146};
-      int textWidth = DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), backgroundColor, &backgroundColor, seq->name, 0);
+        int textWidth = DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), blackColor, NULL, seq->name, 0);
 
-      matrix->Fill(backgroundColor.r, backgroundColor.g, backgroundColor.b);
-      DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, {.r = 253, .g = 95, .b = 0}, &backgroundColor, seq->name, 0);
+        FillRectangle(offscreen_canvas, 0, 0, matrix->width(), matrix->height(), backgroundColor);
+        DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2 + 1, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2 + 1, blackColor, NULL, seq->name, 0);
+
+        DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, {.r = 255, .g = 255, .b = 255}, NULL, seq->name, 0);
+
+        // DrawText(offscreen_canvas, *statusFontOutline, (matrix->width() - textWidth) / 2 - 1, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, blackColor, NULL, seq->name, -2);
+        // DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, {.r = 253, .g = 95, .b = 0}, NULL, seq->name,
+        //          0);
+        shouldRedrawSequenceName = false;
+        dirtyCanvas = true;
+      }
     } else {
+      shouldRedrawSequenceName = false;
       shouldChangeCollection = false;
       bool shouldChangeDisplay = false;
 
@@ -228,24 +260,24 @@ void displayLoop(RGBMatrix *matrix) {
         if (seq->currentCollection()->screenMode == Cross) {
           drawCross(matrix, offscreen_canvas);
         }
-
-        if (time(0) < gl_infotimeout) {
-          rgb_matrix::Color blackColor = {.r = 0, .g = 0, .b = 0};
-          DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), {.r = 255, .g = 255, .b = 255}, &blackColor, gl_infoMessage, 0);
-        }
-
-        //  offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+        dirtyCanvas = true;
       }
     }
-    drawBrightness(matrix, offscreen_canvas);
-    offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+    if (time(0) < gl_brightness_timeout) {
+      drawBrightness(matrix, offscreen_canvas, &smallFont);
+      dirtyCanvas = true;
+      shouldRedrawSequenceName = true;
+    }
+    fprintf(stderr, "/");
+    if (dirtyCanvas == true) {
+
+      offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
+    }
     tmillis_t ellapsedTime = GetTimeInMillis() - frame_start;
     tmillis_t next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
     SleepMillis(next_frame - frame_start);
   }
 }
-
-
 
 int main(int argc, char *argv[]) {
   srand(time(0));

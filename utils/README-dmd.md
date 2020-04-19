@@ -4,5 +4,3 @@
 
   * pétage de plombs si on change de séquence trop vite
   * changement automatique de séquence
-  * afficher le valeur de la brightness
-  * amélioration graphique du message de changement de séquence

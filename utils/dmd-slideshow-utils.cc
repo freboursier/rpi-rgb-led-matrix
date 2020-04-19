@@ -173,7 +173,7 @@ void SleepMillis(tmillis_t milli_seconds) {
   nanosleep(&ts, NULL);
 }
 
-void DrawRectangle(FrameCanvas *canvas, int x0, int y0, int width, int height, const rgb_matrix::Color color) {
+void FillRectangle(FrameCanvas *canvas, int x0, int y0, int width, int height, const rgb_matrix::Color color) {
   for (int y = y0; y <= y0 + height; y++) {
     for (int x = x0; x < x0 + width; x++) {
       canvas->SetPixel(x, y, color.r, color.g, color.b);
