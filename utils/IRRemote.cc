@@ -75,18 +75,12 @@ void *MonitorIRRemote(void *inParam) {
         }
         case KEY_UP: {
           uint8_t newBrightness = MIN(matrix->brightness() + BRIGHTNESS_INCREMENT, 100);
-          matrix->SetBrightness(newBrightness);
-          fprintf(stderr, "Set brighness to %d\n", newBrightness);
-          snprintf(gl_infoMessage, INFO_MESSAGE_LENGTH, "Luminosité %d%%", newBrightness);
-          scheduleInfoMessage();
+          changeBrightnessLevel(matrix, newBrightness);
           break;
         }
         case KEY_DOWN: {
           uint8_t newBrightness = MAX(matrix->brightness() - BRIGHTNESS_INCREMENT, 0);
-          matrix->SetBrightness(newBrightness);
-          fprintf(stderr, "Set brighness to %d\n", newBrightness);
-          snprintf(gl_infoMessage, INFO_MESSAGE_LENGTH, "Luminosité %d%%", newBrightness);
-          scheduleInfoMessage();
+          changeBrightnessLevel(matrix, newBrightness);
           break;
         }
         case KEY_LEFT: {

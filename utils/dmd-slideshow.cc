@@ -51,7 +51,7 @@
 //#define    MEGA_VERBOSE
 
 #define DEBUG 0
-#define IMAGE_DISPLAY_DURATION 5
+#define BRIGHTNESS_DISPLAY_DURATION 3
 #define FRAME_PER_SECOND 30
 #define INFO_MESSAGE_LENGTH 30
 
@@ -74,7 +74,11 @@ volatile bool interrupt_received = false;
 volatile bool next_sequence_received = false;
 static void InterruptHandler(int signo) { interrupt_received = true; }
 
-void scheduleInfoMessage() { gl_brightness_timeout = time(0) + 3; }
+void changeBrightnessLevel(RGBMatrix *matrix, int newLevel)
+{
+   gl_brightness_timeout = time(0) + BRIGHTNESS_DISPLAY_DURATION; 
+   matrix->SetBrightness(newLevel);
+}
 
 void goToNextSequence() {
   fprintf(stderr, "Select next sequence, current is %s\n", gl_sequences[gl_sequence_index]->name);
