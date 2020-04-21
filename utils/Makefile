@@ -14,7 +14,7 @@ RGB_LIBDIR=$(RGB_LIB_DISTRIBUTION)/lib
 RGB_LIBRARY_NAME=rgbmatrix
 RGB_LIBRARY=$(RGB_LIBDIR)/lib$(RGB_LIBRARY_NAME).a
 LDFLAGS+=-L$(RGB_LIBDIR) -l$(RGB_LIBRARY_NAME) -lrt -lm -lpthread
-
+HEXEMBED=./hexembed
 # Imagemagic flags, only needed if actually compiled.
 #MAGICK_CXXFLAGS?=`GraphicsMagick++-config --cppflags --cxxflags`
 #MAGICK_LDFLAGS?=`GraphicsMagick++-config --ldflags --libs`
@@ -29,10 +29,15 @@ all : $(BINARIES)
 $(RGB_LIBRARY): FORCE
 	$(MAKE) -C $(RGB_LIBDIR)
 
+hexembed: hexembed.o
+	gcc hexembed.o -o $@
+	$(HEXEMBED) ../fonts/6x10.bdf smallFontHex > smallFont.c; 
+	$(HEXEMBED) ../fonts/9x18B.bdf largeFontHex > largeFont.c; 
+
 led-image-viewer: led-image-viewer.o $(RGB_LIBRARY)
 	$(CXX) $(CXXFLAGS) led-image-viewer.o -o $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
 
-dmd-slideshow: dmd-slideshow-utils.o dmd-slideshow.o Sequence.o IRRemote.o  FileCollection.o LoadedFile.o $(RGB_LIBRARY)
+dmd-slideshow: hexembed dmd-slideshow-utils.o dmd-slideshow.o Sequence.o IRRemote.o  FileCollection.o LoadedFile.o $(RGB_LIBRARY)
 	$(CXX) $(CXXFLAGS) dmd-slideshow.o dmd-slideshow-utils.o Sequence.o IRRemote.o  FileCollection.o LoadedFile.o -o  $@ $(LDFLAGS) $(MAGICK_LDFLAGS)
 
 
@@ -42,6 +47,10 @@ emoji-scroller: emoji-scroller.o $(RGB_LIBRARY)
 
 video-viewer: video-viewer.o $(RGB_LIBRARY)
 	$(CXX) $(CXXFLAGS) video-viewer.o -o $@ $(LDFLAGS) `pkg-config --cflags --libs  libavcodec libavformat libswscale libavutil`
+
+%.o : %.c
+	gcc -c -o $@ $<
+
 
 %.o : %.cc
 	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) $(MAGICK_CXXFLAGS) -c -o $@ $<

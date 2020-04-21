@@ -48,6 +48,8 @@
 #include "dmd-slideshow.hh"
 #include <wand/magick_wand.h>
 
+#include "largeFont.c"
+#include "smallFont.c"
 //#define    MEGA_VERBOSE
 
 #define DEBUG 0
@@ -107,20 +109,30 @@ void drawBrightness(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, Font *smal
   Color lightGrey = {.r = 120, .g = 120, .b = 120};
 
   int height = matrix->height() - borderSize * 2;
-
   int textWidth = DrawText(offscreen_canvas, *smallFont, originX, originY + smallFont->baseline(), whiteColor, NULL, level, 0);
 
   FillRectangle(offscreen_canvas, originX, originY, width, height, blackColor);
-
   DrawText(offscreen_canvas, *smallFont, (totalWidth - borderSize - textWidth) / 2 + originX + borderSize, originY + smallFont->baseline() + borderSize, whiteColor, NULL, level, 0);
 
   height = height - textAreaHeight - borderSize;
-
   FillRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight, width - borderSize * 2, height, lightGrey);
 
   int enabledHeight = height * matrix->brightness() / 100.0;
-
   FillRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight + (height - enabledHeight), width - borderSize * 2, enabledHeight, whiteColor);
+}
+
+char const *writeFont(const unsigned char fontArray[], const int fontSize) {
+  char const *fileTemplate = "/tmp/font.temp";
+
+  int fd = open(fileTemplate, O_CREAT | O_TRUNC | O_WRONLY);
+  int ret = write(fd, fontArray, fontSize);
+  if (ret != fontSize) {
+    fprintf(stderr, "Failed to write front to %s (%d bytes written)\n", fileTemplate, ret);
+    exit(1);
+  }
+  close(fd);
+
+  return fileTemplate;
 }
 
 void displayLoop(RGBMatrix *matrix) {
@@ -132,20 +144,18 @@ void displayLoop(RGBMatrix *matrix) {
   std::vector<LoadedFile *> *currentImages;
 
   Font statusFont;
-  Font *statusFontOutline;
   Font smallFont;
 
-  if (!smallFont.LoadFont("../fonts/6x10.bdf")) {
+  char const *fontFilename = writeFont(smallFontHex, smallFontHex_size);
+  if (!smallFont.LoadFont(fontFilename)) {
     fprintf(stderr, "Couldn't load smallFont \n");
     exit(1);
   }
-
-  if (!statusFont.LoadFont("../fonts/9x18B.bdf")) {
-    fprintf(stderr, "Couldn't load font \n");
+  fontFilename = writeFont(largeFontHex, largeFontHex_size);
+  if (!statusFont.LoadFont(fontFilename)) {
+    fprintf(stderr, "Couldn't load largefont \n");
     exit(1);
   }
-
-  statusFontOutline = statusFont.CreateOutlineFont();
 
   bool dirtyCanvas = false;
 
@@ -215,8 +225,7 @@ void displayLoop(RGBMatrix *matrix) {
       bool shouldChangeDisplay = false;
 
       for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
-        bool needFrameChange = GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
-        if (needFrameChange) {
+        if (true == (GetTimeInMillis() > (*currentImages)[i]->nextFrameTime)) {
           shouldChangeDisplay = true;
           break;
         }
@@ -235,7 +244,7 @@ void displayLoop(RGBMatrix *matrix) {
             if (MagickNextImage((*currentImages)[i]->wand()) == MagickFalse) {
               MagickResetIterator((*currentImages)[i]->wand());
               if (seq->currentCollection()->displayDuration == 0) {
-                fprintf(stderr, "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n"); 
+                fprintf(stderr, "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n");
                 shouldChangeCollection = true;
               }
             }
@@ -315,7 +324,7 @@ int main(int argc, char *argv[]) {
       return usage(argv[0]);
     }
   }
-  
+
   fprintf(stderr, "%d valid files\n", gl_filenames.size());
 
   for (auto &sequence : gl_sequences) {
