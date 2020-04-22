@@ -1,5 +1,5 @@
 #reminder: re-enable -03
-CXXFLAGS=-Wall -g  -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -Wno-unused-function
+CXXFLAGS=-Wall -O3 -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -Wno-unused-function
 OBJECTS=led-image-viewer.o
 BINARIES=led-image-viewer
 
@@ -33,6 +33,9 @@ hexembed: hexembed.o
 	gcc hexembed.o -o $@
 	$(HEXEMBED) ../fonts/6x10.bdf smallFontHex > smallFont.c; 
 	$(HEXEMBED) ../fonts/9x18B.bdf largeFontHex > largeFont.c; 
+	$(HEXEMBED) ../fonts/4x6.bdf smallestFontHex > smallestFont.c; 
+
+	
 
 led-image-viewer: led-image-viewer.o $(RGB_LIBRARY)
 	$(CXX) $(CXXFLAGS) led-image-viewer.o -o $@ $(LDFLAGS) $(MAGICK_LDFLAGS)

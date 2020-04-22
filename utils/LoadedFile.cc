@@ -1,4 +1,5 @@
 #include "LoadedFile.hh"
+#include "dmd-slideshow.hh"
 
 LoadedFile::LoadedFile(const char *filename, MagickWand *coalescedWand) {
   nextFrameTime = GetTimeInMillis();

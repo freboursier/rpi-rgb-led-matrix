@@ -2,7 +2,8 @@
 #ifndef LOADED_FILE_H
 #define LOADED_FILE_H
 #include <wand/magick_wand.h>
-#include "dmd-slideshow.hh"
+//#include "dmd-slideshow.hh"
+#include "slideshow_types.hh"
 
 class    LoadedFile {
     private:

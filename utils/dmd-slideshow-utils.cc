@@ -84,21 +84,20 @@ void setThreadPriority(int priority, uint32_t affinity_mask) {
   }
 }
 
-void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, MagickWand *wand, unsigned int position, ScreenMode screenMode) {
-
+void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, LoadedFile *loadedFile, unsigned int position, ScreenMode screenMode, Font *smallestFont) {
   if (screenMode == FullScreen) {
-    MagickScaleImage(wand, matrix->width(), matrix->height());
+    MagickScaleImage(loadedFile->wand(), matrix->width(), matrix->height());
   }
   int x_offset = position % 2 == 0 ? 0 : matrix->width() / 2;
   // https://www.imagemagick.org/discourse-server/viewtopic.php?t=31691 for nice speedup
   int y_offset = position <= 1 ? 0 : matrix->height() / 2;
 
-  unsigned long columns = MagickGetImageWidth(wand);
-  unsigned long rows = MagickGetImageHeight(wand);
+  unsigned long columns = MagickGetImageWidth(loadedFile->wand());
+  unsigned long rows = MagickGetImageHeight(loadedFile->wand());
   for (size_t y = 0; y < rows; ++y) {
     for (size_t x = 0; x < columns; ++x) {
       unsigned char pixels[27];
-      MagickGetImagePixels(wand, x, y, 1, 1, "RGBA", CharPixel, pixels);
+      MagickGetImagePixels(loadedFile->wand(), x, y, 1, 1, "RGBA", CharPixel, pixels);
       offscreen_canvas->SetPixel(x + x_offset, y + y_offset, pixels[0], pixels[1], pixels[2]);
     }
   }

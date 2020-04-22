@@ -42,7 +42,7 @@
 #include <vector>
 
 #include "Sequence.hh"
-
+#include "LoadedFile.hh"
 #include "IRRemote.hh"
 #include "dmd-slideshow-utils.hh"
 #include "dmd-slideshow.hh"
@@ -50,6 +50,7 @@
 
 #include "largeFont.c"
 #include "smallFont.c"
+#include "smallestFont.c"
 //#define    MEGA_VERBOSE
 
 #define DEBUG 0
@@ -145,6 +146,7 @@ void displayLoop(RGBMatrix *matrix) {
 
   Font statusFont;
   Font smallFont;
+  Font  smallestFont;
 
   char const *fontFilename = writeFont(smallFontHex, smallFontHex_size);
   if (!smallFont.LoadFont(fontFilename)) {
@@ -156,7 +158,11 @@ void displayLoop(RGBMatrix *matrix) {
     fprintf(stderr, "Couldn't load largefont \n");
     exit(1);
   }
-
+  fontFilename = writeFont(smallestFontHex, smallestFontHex_size);
+  if (!smallestFont.LoadFont(fontFilename)) {
+    fprintf(stderr, "Couldn't load smallest font \n");
+    exit(1);
+  }
   bool dirtyCanvas = false;
 
   while (!interrupt_received) {
@@ -260,7 +266,7 @@ void displayLoop(RGBMatrix *matrix) {
             }
             (*currentImages)[i]->nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
           }
-          blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i]->wand(), i, seq->currentCollection()->screenMode);
+          blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i], i, seq->currentCollection()->screenMode, &smallestFont);
         }
         if (seq->currentCollection()->screenMode == Cross) {
           drawCross(matrix, offscreen_canvas);
