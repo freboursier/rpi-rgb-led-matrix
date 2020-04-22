@@ -13,7 +13,7 @@
 
 extern  char gl_infoMessage[INFO_MESSAGE_LENGTH];
 extern bool next_sequence_received;
-  
+extern bool show_filename;
 void *MonitorIRRemote(void *inParam) {
   int fd, rd;
   unsigned int i;
@@ -84,6 +84,7 @@ void *MonitorIRRemote(void *inParam) {
           break;
         }
         case KEY_LEFT: {
+          show_filename = !show_filename;
           break;
         }
         case KEY_RIGHT: {

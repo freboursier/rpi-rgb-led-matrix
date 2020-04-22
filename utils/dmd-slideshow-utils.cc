@@ -2,9 +2,12 @@
 #include "FileCollection.hh"
 #include "Sequence.hh"
 #include "dmd-slideshow.hh"
+#include "graphics.h"
 
 #include <stdio.h>
 #include <string.h>
+
+using rgb_matrix::Color;
 
 bool isValidDirent(struct dirent *entry) {
   if (entry->d_type != DT_REG) {
@@ -101,6 +104,13 @@ void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, Loaded
       offscreen_canvas->SetPixel(x + x_offset, y + y_offset, pixels[0], pixels[1], pixels[2]);
     }
   }
+  const char *lastSlash = strrchr(loadedFile->filename(), '/');
+  if (smallestFont != NULL && lastSlash != NULL) {
+      Color blackColor = {.r = 0, .g = 0, .b = 0};
+      Color whiteColor = {.r = 255, .g = 255, .b = 255};
+    DrawText(offscreen_canvas, *smallestFont, x_offset, y_offset + smallestFont->baseline(), whiteColor, &blackColor, lastSlash + 1, 0);
+  }
+
 }
 
 void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas) {

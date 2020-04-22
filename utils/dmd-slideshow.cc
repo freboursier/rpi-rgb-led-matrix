@@ -73,6 +73,8 @@ time_t gl_brightness_timeout = 0;
 
 volatile bool interrupt_received = false;
 volatile bool next_sequence_received = false;
+volatile  bool show_filename = false;
+
 static void InterruptHandler(int signo) {
   interrupt_received = true;
 }
@@ -266,7 +268,7 @@ void displayLoop(RGBMatrix *matrix) {
             }
             (*currentImages)[i]->nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
           }
-          blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i], i, seq->currentCollection()->screenMode, &smallestFont);
+          blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i], i, seq->currentCollection()->screenMode, show_filename ? &smallestFont : NULL);
         }
         if (seq->currentCollection()->screenMode == Cross) {
           drawCross(matrix, offscreen_canvas);
