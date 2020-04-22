@@ -11,6 +11,7 @@
 class Sequence {
 
 public:
+  Sequence(const char *newName, bool newTransient);
   Sequence(const char *newName);
   ~Sequence();
 
@@ -28,11 +29,13 @@ public:
   bool nextCollectionIsReady();
   void reset();
   const char *name();
+  bool  transient;
 
 private:
   unsigned int nextCollectionIdx = 0;
   int currentCollectionIdx = -1;
   const char *_name;
+  char const*stringForScreenMode(ScreenMode screenMode);
 };
 
 #endif

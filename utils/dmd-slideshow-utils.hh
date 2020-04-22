@@ -28,7 +28,7 @@ void *LoadFile(void *inParam);
 tmillis_t GetTimeInMillis();
 void SleepMillis(tmillis_t milli_seconds);
 
-void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, LoadedFile *loadedFile, unsigned int position, ScreenMode screenMode, Font *smallesFont);
+void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, LoadedFile *loadedFile, unsigned int position, ScreenMode screenMode, Font *smallesFont, Font *largeFont);
 void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas);
 
 void FillRectangle(FrameCanvas *c, int x0, int y0, int width, int height, rgb_matrix::Color color);

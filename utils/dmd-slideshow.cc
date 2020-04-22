@@ -41,17 +41,17 @@
 #include <string>
 #include <vector>
 
-#include "Sequence.hh"
-#include "LoadedFile.hh"
 #include "IRRemote.hh"
+#include "LoadedFile.hh"
+#include "Sequence.hh"
 #include "dmd-slideshow-utils.hh"
 #include "dmd-slideshow.hh"
+#include "slideshow_types.hh"
 #include <wand/magick_wand.h>
 
 #include "largeFont.c"
 #include "smallFont.c"
 #include "smallestFont.c"
-//#define    MEGA_VERBOSE
 
 #define DEBUG 0
 #define BRIGHTNESS_DISPLAY_DURATION 3
@@ -73,7 +73,8 @@ time_t gl_brightness_timeout = 0;
 
 volatile bool interrupt_received = false;
 volatile bool next_sequence_received = false;
-volatile  bool show_filename = false;
+volatile bool show_filename = false;
+volatile int display_status = DISPLAY_ENABLED;
 
 static void InterruptHandler(int signo) {
   interrupt_received = true;
@@ -86,10 +87,15 @@ void changeBrightnessLevel(RGBMatrix *matrix, int newLevel) {
 
 void goToNextSequence() {
   fprintf(stderr, "Select next sequence, current is %s\n", gl_sequences[gl_sequence_index]->name());
+  if (gl_sequences[gl_sequence_index]->transient == true) {
+    gl_sequences.erase(gl_sequences.begin() + gl_sequence_index);
+    fprintf(stderr, "Trash transient sequence");
+  } else {
   int nextSequenceIndex = (gl_sequence_index + 1) % gl_sequences.size();
   if (nextSequenceIndex != gl_sequence_index) {
     gl_sequences[gl_sequence_index]->reset();
     gl_sequence_index = nextSequenceIndex;
+  }
   }
   next_sequence_received = false;
 }
@@ -144,11 +150,13 @@ void displayLoop(RGBMatrix *matrix) {
 
   bool shouldChangeCollection = false;
   bool shouldRedrawSequenceName = true;
+  bool dirtyCanvas = false;
+
   std::vector<LoadedFile *> *currentImages;
 
   Font statusFont;
   Font smallFont;
-  Font  smallestFont;
+  Font smallestFont;
 
   char const *fontFilename = writeFont(smallFontHex, smallFontHex_size);
   if (!smallFont.LoadFont(fontFilename)) {
@@ -165,125 +173,131 @@ void displayLoop(RGBMatrix *matrix) {
     fprintf(stderr, "Couldn't load smallest font \n");
     exit(1);
   }
-  bool dirtyCanvas = false;
 
   while (!interrupt_received) {
     dirtyCanvas = false;
-    if (next_sequence_received) {
-      if (workerThread != 0) {
-        pthread_cancel(workerThread);
-        workerThread = 0;
-      } else {
-        goToNextSequence();
-        shouldRedrawSequenceName = true;
-      }
-    }
     tmillis_t frame_start = GetTimeInMillis();
-    Sequence *seq = gl_sequences[gl_sequence_index];
-    if (workerThread == 0 && false == seq->nextCollectionIsReady()) {
-      fprintf(stderr, " => %d loaded files in collection %s, need %d\n", seq->nextCollection()->loadedFiles.size(), seq->nextCollection()->regex, seq->nextCollection()->visibleImages);
-
-      int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)seq);
-      if (ret) {
-        printf("Failed to create worker thread : %d\n", ret);
-      }
-    }
-
-    if (workerThread) {
-      void *threadRetval = NULL;
-      if (0 == pthread_tryjoin_np(workerThread, &threadRetval)) {
-        fprintf(stderr, "\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
-        workerThread = 0;
-        if (seq->currentCollection() == NULL && (int)threadRetval == 0) {
-          seq->forwardCollection();
-          currentImages = &(seq->currentCollection()->loadedFiles);
-          seq->currentCollection()->displayStartTime = GetTimeInMillis() + 3 * 1000;
-        } else if (threadRetval == PTHREAD_CANCELED) {
-          fprintf(stderr, "## Thread has been canceled, go to next sequence");
+    if (display_status == DISPLAY_ENABLED) {
+      if (next_sequence_received) {
+        if (workerThread != 0) {
+          pthread_cancel(workerThread);
+          workerThread = 0;
+        } else {
           goToNextSequence();
           shouldRedrawSequenceName = true;
         }
       }
-    }
-    if (shouldChangeCollection == true && seq->nextCollectionIsReady() && workerThread == 0) {
-      seq->forwardCollection();
-      currentImages = &(seq->currentCollection()->loadedFiles);
-      seq->currentCollection()->displayStartTime = GetTimeInMillis();
-    }
 
-    if (seq->currentCollection() == NULL || seq->currentCollection()->displayStartTime > GetTimeInMillis()) {
-      if (shouldRedrawSequenceName == true) {
-        Color backgroundColor = {.r = 241, .g = 172, .b = 71};
-        Color blackColor = {.r = 0, .g = 0, .b = 0};
+      Sequence *seq = gl_sequences[gl_sequence_index];
+      if (workerThread == 0 && false == seq->nextCollectionIsReady()) {
+        fprintf(stderr, " => %d loaded files in collection %s, need %d\n", seq->nextCollection()->loadedFiles.size(), seq->nextCollection()->regex, seq->nextCollection()->visibleImages);
 
-        int textWidth = DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), blackColor, NULL, seq->name(), 0);
+        int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)seq);
+        if (ret) {
+          printf("Failed to create worker thread : %d\n", ret);
+        }
+      }
 
-        FillRectangle(offscreen_canvas, 0, 0, matrix->width(), matrix->height(), backgroundColor);
-        DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2 + 1, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2 + 1, blackColor, NULL, seq->name(), 0);
+      if (workerThread) {
+        void *threadRetval = NULL;
+        if (0 == pthread_tryjoin_np(workerThread, &threadRetval)) {
+          fprintf(stderr, "\033[0;31mWorker thread has finished\033[0m with value %d\n", (int)threadRetval);
+          workerThread = 0;
+          if (seq->currentCollection() == NULL && (int)threadRetval == 0) {
+            seq->forwardCollection();
+            currentImages = &(seq->currentCollection()->loadedFiles);
+            seq->currentCollection()->displayStartTime = GetTimeInMillis() + (seq->transient ? 0 :  3 * 1000);
+          } else if (threadRetval == PTHREAD_CANCELED) {
+            fprintf(stderr, "## Thread has been canceled, go to next sequence");
+            goToNextSequence();
+            shouldRedrawSequenceName = true;
+          }
+        }
+      }
+      if (shouldChangeCollection == true && seq->nextCollectionIsReady() && workerThread == 0) {
+        seq->forwardCollection();
+        currentImages = &(seq->currentCollection()->loadedFiles);
+        seq->currentCollection()->displayStartTime = GetTimeInMillis();
+      }
 
-        DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, {.r = 255, .g = 255, .b = 255}, NULL,
-                 seq->name(), 0);
+      if (seq->currentCollection() == NULL || seq->currentCollection()->displayStartTime > GetTimeInMillis()) {
+        if (shouldRedrawSequenceName == true && seq->transient == false) {
+          Color backgroundColor = {.r = 241, .g = 172, .b = 71};
+          Color blackColor = {.r = 0, .g = 0, .b = 0};
 
+          int textWidth = DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), blackColor, NULL, seq->name(), 0);
+
+          FillRectangle(offscreen_canvas, 0, 0, matrix->width(), matrix->height(), backgroundColor);
+          DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2 + 1, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2 + 1, blackColor, NULL, seq->name(), 0);
+
+          DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, {.r = 255, .g = 255, .b = 255}, NULL,
+                   seq->name(), 0);
+
+          shouldRedrawSequenceName = false;
+          dirtyCanvas = true;
+        }
+      } else {
         shouldRedrawSequenceName = false;
-        dirtyCanvas = true;
-      }
-    } else {
-      shouldRedrawSequenceName = false;
-      shouldChangeCollection = false;
-      bool shouldChangeDisplay = false;
-
-      for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
-        if (true == (GetTimeInMillis() > (*currentImages)[i]->nextFrameTime)) {
-          shouldChangeDisplay = true;
-          break;
-        }
-      }
-
-      if (shouldChangeDisplay) {
-        if (seq->currentCollection()->displayDuration > 0 && GetTimeInMillis() - seq->currentCollection()->displayStartTime > (seq->currentCollection()->displayDuration * 1000)) {
-          fprintf(stderr, "\033[0;34mTime is up for current collection, should move to next \033\n");
-          shouldChangeCollection = true;
-        }
+        shouldChangeCollection = false;
+        bool shouldChangeDisplay = false;
 
         for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
-          bool needFrameChange = GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
+          if (true == (GetTimeInMillis() > (*currentImages)[i]->nextFrameTime)) {
+            shouldChangeDisplay = true;
+            break;
+          }
+        }
 
-          if (needFrameChange) {
-            if (MagickNextImage((*currentImages)[i]->wand()) == MagickFalse) {
-              MagickResetIterator((*currentImages)[i]->wand());
-              if (seq->currentCollection()->displayDuration == 0) {
-                fprintf(stderr, "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n");
-                shouldChangeCollection = true;
+        if (shouldChangeDisplay) {
+          if (seq->currentCollection()->displayDuration > 0 && GetTimeInMillis() - seq->currentCollection()->displayStartTime > (seq->currentCollection()->displayDuration * 1000)) {
+            fprintf(stderr, "\033[0;34mTime is up for current collection, should move to next \033\n");
+            shouldChangeCollection = true;
+          }
+
+          for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
+            bool needFrameChange = GetTimeInMillis() > (*currentImages)[i]->nextFrameTime;
+
+            if (needFrameChange) {
+              if (MagickNextImage((*currentImages)[i]->wand()) == MagickFalse) {
+                MagickResetIterator((*currentImages)[i]->wand());
+                if (seq->currentCollection()->displayDuration == 0) {
+                  fprintf(stderr, "\033[0;34mCurrent animation is FINISHED, should move to next collection \033\n");
+                  shouldChangeCollection = true;
+                }
               }
             }
-          }
 
-          if (needFrameChange) {
-            int64_t delay_time_us = MagickGetImageDelay((*currentImages)[i]->wand());
-            if (delay_time_us == 0) {
-              delay_time_us = 50 * 1000; // single image.
-            } else if (delay_time_us < 0) {
-              delay_time_us = 100 * 1000; // 1/10sec
-              fprintf(stderr, "CRAPPY TIMING USE DEFAULT");
+            if (needFrameChange) {
+              int64_t delay_time_us = MagickGetImageDelay((*currentImages)[i]->wand());
+              if (delay_time_us == 0) {
+                delay_time_us = 50 * 1000; // single image.
+              } else if (delay_time_us < 0) {
+                delay_time_us = 100 * 1000; // 1/10sec
+                fprintf(stderr, "CRAPPY TIMING USE DEFAULT");
+              }
+              (*currentImages)[i]->nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
             }
-            (*currentImages)[i]->nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
+            blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i], i, seq->currentCollection()->screenMode, show_filename ? &smallestFont : NULL, &statusFont);
           }
-          blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i], i, seq->currentCollection()->screenMode, show_filename ? &smallestFont : NULL);
+          if (seq->currentCollection()->screenMode == Cross) {
+            drawCross(matrix, offscreen_canvas);
+          }
+          dirtyCanvas = true;
         }
-        if (seq->currentCollection()->screenMode == Cross) {
-          drawCross(matrix, offscreen_canvas);
-        }
+      }
+      if (time(0) < gl_brightness_timeout) {
+        drawBrightness(matrix, offscreen_canvas, &smallFont);
         dirtyCanvas = true;
+        shouldRedrawSequenceName = true;
+      }
+    } else {
+      if (display_status == DISPLAY_SHOULD_CLEAR) {
+        offscreen_canvas->Clear();
+        dirtyCanvas = true;
+        display_status = DISPLAY_OFF;
       }
     }
-    if (time(0) < gl_brightness_timeout) {
-      drawBrightness(matrix, offscreen_canvas, &smallFont);
-      dirtyCanvas = true;
-      shouldRedrawSequenceName = true;
-    }
-    fprintf(stderr, "/");
     if (dirtyCanvas == true) {
-
       offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas, 1);
     }
     tmillis_t ellapsedTime = GetTimeInMillis() - frame_start;
@@ -332,6 +346,12 @@ int main(int argc, char *argv[]) {
       return usage(argv[0]);
     }
   }
+
+ Sequence *newSequence = new Sequence("splash", true);
+
+FileCollection *newCollection = new FileCollection(Splash, 0, ".*rpi2dmd.*");
+newSequence->collections.push_back(newCollection);
+gl_sequences.insert(gl_sequences.begin(), newSequence);
 
   fprintf(stderr, "%d valid files\n", gl_filenames.size());
 

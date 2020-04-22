@@ -5,6 +5,12 @@ using std::vector;
 
 Sequence::Sequence(const char *newName) {
   _name = newName;
+  transient = false;
+}
+
+Sequence::Sequence(const char *newName, bool newTransient) {
+  _name = newName;
+  transient = newTransient;
 }
 
 Sequence::~Sequence() {}
@@ -25,9 +31,6 @@ void Sequence::loadCollections(vector<const char *> filenames) {
     for (auto &filename : filenames) {
       reti = regexec(&regex, filename, 0, NULL, 0);
       if (!reti) {
-#ifdef MEGA_VERBOSE
-        fprintf(stderr, "Match %s => %s\n", collection->regex, filename);
-#endif
         collection->filePaths.push_back(filename);
       }
     }
@@ -43,10 +46,24 @@ FileCollection *Sequence::currentCollection() {
   return collections[currentCollectionIdx];
 }
 
+char const*Sequence::stringForScreenMode(ScreenMode screenMode)
+{
+  switch (screenMode) {
+    case FullScreen:
+    return "Full screen";
+    case Cross:
+    return "Cross";
+    case Splash:
+    return "Splash";
+    default:
+    return "Unknown";
+  }
+}
+
 void Sequence::printContent() {
   fprintf(stderr, "Sequence %s / %d collections\n", _name, collections.size());
   for (auto &collection : collections) {
-    const char *displayMode = collection->screenMode == FullScreen ? "Full screen" : "Cross";
+    char const *displayMode = stringForScreenMode(collection->screenMode);
     fprintf(stderr, "\tCollection %s => %d images / %d seconds / display mode %s\n", collection->regex, collection->filePaths.size(), collection->displayDuration, displayMode);
   }
 }

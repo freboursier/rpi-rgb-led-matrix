@@ -11,9 +11,10 @@
 #define BRIGHTNESS_INCREMENT 5
 #define INFO_MESSAGE_LENGTH 30
 
-extern  char gl_infoMessage[INFO_MESSAGE_LENGTH];
+extern char gl_infoMessage[INFO_MESSAGE_LENGTH];
 extern bool next_sequence_received;
 extern bool show_filename;
+extern int display_status;
 void *MonitorIRRemote(void *inParam) {
   int fd, rd;
   unsigned int i;
@@ -74,13 +75,17 @@ void *MonitorIRRemote(void *inParam) {
           break;
         }
         case KEY_UP: {
-          uint8_t newBrightness = MIN(matrix->brightness() + BRIGHTNESS_INCREMENT, 100);
-          changeBrightnessLevel(matrix, newBrightness);
+          if (display_status == true) {
+            uint8_t newBrightness = MIN(matrix->brightness() + BRIGHTNESS_INCREMENT, 100);
+            changeBrightnessLevel(matrix, newBrightness);
+          }
           break;
         }
         case KEY_DOWN: {
-          uint8_t newBrightness = MAX(matrix->brightness() - BRIGHTNESS_INCREMENT, 0);
-          changeBrightnessLevel(matrix, newBrightness);
+          if (display_status == true) {
+            uint8_t newBrightness = MAX(matrix->brightness() - BRIGHTNESS_INCREMENT, 0);
+            changeBrightnessLevel(matrix, newBrightness);
+          }
           break;
         }
         case KEY_LEFT: {
@@ -88,11 +93,13 @@ void *MonitorIRRemote(void *inParam) {
           break;
         }
         case KEY_RIGHT: {
-          next_sequence_received = true;
+          if (display_status == true) {
+            next_sequence_received = true;
+          }
           break;
         }
         case KEY_OK: {
-          printf("OKOK!\n");
+          display_status = (display_status == DISPLAY_ENABLED) ? DISPLAY_SHOULD_CLEAR : DISPLAY_ENABLED;
           break;
         }
         }

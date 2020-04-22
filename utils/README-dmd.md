@@ -4,5 +4,4 @@
 
   * pétage de plombs si on change de séquence trop vite
   * changement automatique de séquence
-  * Ajouter un bouton on/off global 
-  * Ajouter un splash "Powered by Rpi2DMD"
+  * Look de la page intermédiaire
