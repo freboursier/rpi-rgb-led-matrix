@@ -88,22 +88,7 @@ void setThreadPriority(int priority, uint32_t affinity_mask) {
 }
 
 void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, LoadedFile *loadedFile, unsigned int position, ScreenMode screenMode, Font *smallestFont, Font *largeFont) {
-  if (screenMode == Splash) {
-    position = 3;
-
-    Color pinkColor = {.r = 222, .g = 121, .b = 173};
-    Color blueColor = {.r = 0, .g = 157, .b = 222};
-
-    int splashTextX = 10;
-
-    DrawText(offscreen_canvas, *largeFont, splashTextX + 1, 5 + largeFont->baseline(), pinkColor, NULL, "MEGA DMD by monk", 0);
-    DrawText(offscreen_canvas, *largeFont, splashTextX, 4 + largeFont->baseline(), blueColor, NULL, "MEGA DMD by monk", 0);
-
-    int splashTextY = matrix->height() / 2;
-    DrawText(offscreen_canvas, *largeFont, splashTextX + 1, splashTextY + 1 + largeFont->baseline(), pinkColor, NULL, "powered by", 0);
-    DrawText(offscreen_canvas, *largeFont, splashTextX, splashTextY + largeFont->baseline(), blueColor, NULL, "powered by", 0);
-  }
-  if (screenMode == FullScreen) {
+  if (screenMode == FullScreen || screenMode == Splash) {
     MagickScaleImage(loadedFile->wand(), matrix->width(), matrix->height());
   }
 
@@ -120,12 +105,27 @@ void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, Loaded
       offscreen_canvas->SetPixel(x + x_offset, y + y_offset, pixels[0], pixels[1], pixels[2]);
     }
   }
+    if (screenMode == Splash) {
+    Color pinkColor = {.r = 222, .g = 121, .b = 173};
+    Color blueColor = {.r = 0, .g = 157, .b = 222};
+
+    int splashTextX = 10;
+
+    DrawText(offscreen_canvas, *largeFont, splashTextX + 1, 5 + largeFont->baseline(), pinkColor, NULL, "MEGA DMD by monk", 0);
+    DrawText(offscreen_canvas, *largeFont, splashTextX, 4 + largeFont->baseline(), blueColor, NULL, "MEGA DMD by monk", 0);
+
+    int splashTextY = matrix->height() / 2;
+    DrawText(offscreen_canvas, *largeFont, splashTextX + 1, splashTextY + 1 + largeFont->baseline(), pinkColor, NULL, "powered by", 0);
+    DrawText(offscreen_canvas, *largeFont, splashTextX, splashTextY + largeFont->baseline(), blueColor, NULL, "powered by", 0);
+  }
+
   const char *lastSlash = strrchr(loadedFile->filename(), '/');
   if (smallestFont != NULL && lastSlash != NULL) {
     Color blackColor = {.r = 0, .g = 0, .b = 0};
     Color whiteColor = {.r = 255, .g = 255, .b = 255};
     DrawText(offscreen_canvas, *smallestFont, x_offset, y_offset + smallestFont->baseline(), whiteColor, &blackColor, lastSlash + 1, 0);
   }
+
 }
 
 void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas) {

@@ -14,10 +14,13 @@ public:
   const char *regex;
   ScreenMode screenMode;
   unsigned int displayDuration;
-  tmillis_t displayStartTime; // When did we start to show this collection ?
+  tmillis_t _displayStartTime; // When did we start to show this collection ?
   std::vector<const char *> filePaths;
   std::vector<LoadedFile *> loadedFiles;
   unsigned short visibleImages; // Number of files show simultaneously
+
+  void    setDisplayStartTime(tmillis_t newStartTime);
+  tmillis_t displayStartTime();
 };
 
 #endif

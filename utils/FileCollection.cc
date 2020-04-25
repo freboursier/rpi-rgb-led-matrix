@@ -17,3 +17,16 @@ FileCollection::~FileCollection() {
   filePaths.clear();
   loadedFiles.clear();
 }
+
+  void    FileCollection::setDisplayStartTime(tmillis_t newStartTime)
+  {
+    _displayStartTime = newStartTime;
+    for (auto &loadedFile : loadedFiles) {
+      loadedFile->nextFrameTime = newStartTime;
+    }
+  }
+
+  tmillis_t FileCollection::displayStartTime()
+  {
+    return _displayStartTime;
+  }

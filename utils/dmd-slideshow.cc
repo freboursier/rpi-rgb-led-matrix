@@ -36,6 +36,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <inttypes.h>
 
 #include <map>
 #include <string>
@@ -55,8 +56,9 @@
 
 #define DEBUG 0
 #define BRIGHTNESS_DISPLAY_DURATION 3
-#define FRAME_PER_SECOND 30
+#define FRAME_PER_SECOND 20 // Don't go higher than 20 / 25 or you will drop frames
 #define DEFAULT_DISPLAY_DURATION 10
+#define SPLASH_GIF  "LOGO_RPI2DMD_Impact_RattenJager.gif"
 
 std::vector<Sequence *> gl_sequences;
 int gl_sequence_index = 0;
@@ -136,7 +138,7 @@ char const *writeFont(const unsigned char fontArray[], const int fontSize) {
   int fd = open(fileTemplate, O_CREAT | O_TRUNC | O_WRONLY);
   int ret = write(fd, fontArray, fontSize);
   if (ret != fontSize) {
-    fprintf(stderr, "Failed to write front to %s (%d bytes written)\n", fileTemplate, ret);
+    fprintf(stderr, "Failed to write font to %s (%d bytes written)\n", fileTemplate, ret);
     exit(1);
   }
   close(fd);
@@ -152,7 +154,7 @@ void displayLoop(RGBMatrix *matrix) {
   bool shouldRedrawSequenceName = true;
   bool dirtyCanvas = false;
 
-  std::vector<LoadedFile *> *currentImages;
+  std::vector<LoadedFile *> *currentImages = NULL;
 
   Font statusFont;
   Font smallFont;
@@ -206,7 +208,7 @@ void displayLoop(RGBMatrix *matrix) {
           if (seq->currentCollection() == NULL && (int)threadRetval == 0) {
             seq->forwardCollection();
             currentImages = &(seq->currentCollection()->loadedFiles);
-            seq->currentCollection()->displayStartTime = GetTimeInMillis() + (seq->transient ? 0 :  3 * 1000);
+            seq->currentCollection()->setDisplayStartTime(GetTimeInMillis() + (seq->transient ? 0 :  3 * 1000));
           } else if (threadRetval == PTHREAD_CANCELED) {
             fprintf(stderr, "## Thread has been canceled, go to next sequence");
             goToNextSequence();
@@ -217,10 +219,10 @@ void displayLoop(RGBMatrix *matrix) {
       if (shouldChangeCollection == true && seq->nextCollectionIsReady() && workerThread == 0) {
         seq->forwardCollection();
         currentImages = &(seq->currentCollection()->loadedFiles);
-        seq->currentCollection()->displayStartTime = GetTimeInMillis();
+        seq->currentCollection()->setDisplayStartTime(GetTimeInMillis());
       }
 
-      if (seq->currentCollection() == NULL || seq->currentCollection()->displayStartTime > GetTimeInMillis()) {
+      if (seq->currentCollection() == NULL || seq->currentCollection()->displayStartTime() > GetTimeInMillis()) {
         if (shouldRedrawSequenceName == true && seq->transient == false) {
           Color backgroundColor = {.r = 241, .g = 172, .b = 71};
           Color blackColor = {.r = 0, .g = 0, .b = 0};
@@ -241,6 +243,7 @@ void displayLoop(RGBMatrix *matrix) {
         shouldChangeCollection = false;
         bool shouldChangeDisplay = false;
 
+//    fprintf(stderr, "XCurrent time is %" PRId64 "\n", GetTimeInMillis());
         for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
           if (true == (GetTimeInMillis() > (*currentImages)[i]->nextFrameTime)) {
             shouldChangeDisplay = true;
@@ -249,7 +252,7 @@ void displayLoop(RGBMatrix *matrix) {
         }
 
         if (shouldChangeDisplay) {
-          if (seq->currentCollection()->displayDuration > 0 && GetTimeInMillis() - seq->currentCollection()->displayStartTime > (seq->currentCollection()->displayDuration * 1000)) {
+          if (seq->currentCollection()->displayDuration > 0 && GetTimeInMillis() - seq->currentCollection()->displayStartTime() > (seq->currentCollection()->displayDuration * 1000)) {
             fprintf(stderr, "\033[0;34mTime is up for current collection, should move to next \033\n");
             shouldChangeCollection = true;
           }
@@ -268,14 +271,14 @@ void displayLoop(RGBMatrix *matrix) {
             }
 
             if (needFrameChange) {
-              int64_t delay_time_us = MagickGetImageDelay((*currentImages)[i]->wand());
+              int64_t delay_time_us = MagickGetImageDelay((*currentImages)[i]->wand()) * 10000;
               if (delay_time_us == 0) {
                 delay_time_us = 50 * 1000; // single image.
               } else if (delay_time_us < 0) {
                 delay_time_us = 100 * 1000; // 1/10sec
                 fprintf(stderr, "CRAPPY TIMING USE DEFAULT");
               }
-              (*currentImages)[i]->nextFrameTime = GetTimeInMillis() + delay_time_us / 100.0;
+              (*currentImages)[i]->nextFrameTime =  (*currentImages)[i]->nextFrameTime + delay_time_us / 1000.0; 
             }
             blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i], i, seq->currentCollection()->screenMode, show_filename ? &smallestFont : NULL, &statusFont);
           }
@@ -302,6 +305,9 @@ void displayLoop(RGBMatrix *matrix) {
     }
     tmillis_t ellapsedTime = GetTimeInMillis() - frame_start;
     tmillis_t next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
+if (next_frame - frame_start < 0) {
+  fprintf(stderr, "LOST FRAMES\n");
+}
     SleepMillis(next_frame - frame_start);
   }
 }
@@ -349,7 +355,7 @@ int main(int argc, char *argv[]) {
 
  Sequence *newSequence = new Sequence("splash", true);
 
-FileCollection *newCollection = new FileCollection(Splash, 0, ".*rpi2dmd.*");
+FileCollection *newCollection = new FileCollection(Splash, 0, SPLASH_GIF);
 newSequence->collections.push_back(newCollection);
 gl_sequences.insert(gl_sequences.begin(), newSequence);
 
