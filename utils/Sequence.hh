@@ -23,19 +23,27 @@ public:
   void forwardCollection();
 
   std::vector<FileCollection *> collections;
-  int displayTime; // Display time in seconds
 
   unsigned int nextCollectionTargetSize();
   bool nextCollectionIsReady();
   void reset();
   const char *name();
-  bool  transient;
+  bool transient;
+
+  void setDisplayTime(int newDisplayTime);
+  int displayTime();
+  void setDisplayStartTime(tmillis_t newStartTime);
+  tmillis_t displayStartTime();
+
+  bool isExpired();
 
 private:
   unsigned int nextCollectionIdx = 0;
   int currentCollectionIdx = -1;
   const char *_name;
-  char const*stringForScreenMode(ScreenMode screenMode);
+  char const *stringForScreenMode(ScreenMode screenMode);
+  int _displayTime; // Display time in seconds
+  tmillis_t _displayStartTime;
 };
 
 #endif

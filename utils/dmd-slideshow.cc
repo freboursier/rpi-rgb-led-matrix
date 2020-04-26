@@ -36,6 +36,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <getopt.h>
 #include <inttypes.h>
 
 #include <map>
@@ -57,8 +58,9 @@
 #define DEBUG 0
 #define BRIGHTNESS_DISPLAY_DURATION 3
 #define FRAME_PER_SECOND 20 // Don't go higher than 20 / 25 or you will drop frames
-#define DEFAULT_DISPLAY_DURATION 10
-#define SPLASH_GIF  "LOGO_RPI2DMD_Impact_RattenJager.gif"
+#define DEFAULT_COLLECTION_DURATION 10
+#define DEFAULT_SEQUENCE_DURATION 3600
+#define SPLASH_GIF "LOGO_RPI2DMD_Impact_RattenJager.gif"
 
 std::vector<Sequence *> gl_sequences;
 int gl_sequence_index = 0;
@@ -87,49 +89,46 @@ void changeBrightnessLevel(RGBMatrix *matrix, int newLevel) {
   matrix->SetBrightness(newLevel);
 }
 
-void goToNextSequence() {
+Sequence *goToNextSequence() {
   fprintf(stderr, "Select next sequence, current is %s\n", gl_sequences[gl_sequence_index]->name());
   if (gl_sequences[gl_sequence_index]->transient == true) {
     gl_sequences.erase(gl_sequences.begin() + gl_sequence_index);
     fprintf(stderr, "Trash transient sequence");
   } else {
-  int nextSequenceIndex = (gl_sequence_index + 1) % gl_sequences.size();
-  if (nextSequenceIndex != gl_sequence_index) {
-    gl_sequences[gl_sequence_index]->reset();
-    gl_sequence_index = nextSequenceIndex;
-  }
+    int nextSequenceIndex = (gl_sequence_index + 1) % gl_sequences.size();
+    if (nextSequenceIndex != gl_sequence_index) {
+      gl_sequences[gl_sequence_index]->reset();
+      gl_sequence_index = nextSequenceIndex;
+      gl_sequences[gl_sequence_index]->setDisplayStartTime(GetTimeInMillis());
+    }
   }
   next_sequence_received = false;
+  return gl_sequences[gl_sequence_index];
 }
 
 void drawBrightness(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, Font *smallFont) {
 
   int totalWidth = 30;
   int textAreaHeight = 12;
-  int width = totalWidth;
   int borderSize = 2;
   char *level = NULL;
 
   asprintf(&level, "%d%%", matrix->brightness());
 
-  int originX = matrix->width() - (width + borderSize);
+  int originX = matrix->width() - (totalWidth + borderSize);
   int originY = borderSize;
-
-  Color blackColor = {.r = 0, .g = 0, .b = 0};
-  Color whiteColor = {.r = 255, .g = 255, .b = 255};
-  Color lightGrey = {.r = 120, .g = 120, .b = 120};
 
   int height = matrix->height() - borderSize * 2;
   int textWidth = DrawText(offscreen_canvas, *smallFont, originX, originY + smallFont->baseline(), whiteColor, NULL, level, 0);
 
-  FillRectangle(offscreen_canvas, originX, originY, width, height, blackColor);
+  FillRectangle(offscreen_canvas, originX, originY, totalWidth, height, blackColor);
   DrawText(offscreen_canvas, *smallFont, (totalWidth - borderSize - textWidth) / 2 + originX + borderSize, originY + smallFont->baseline() + borderSize, whiteColor, NULL, level, 0);
 
   height = height - textAreaHeight - borderSize;
-  FillRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight, width - borderSize * 2, height, lightGrey);
+  FillRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight, totalWidth - borderSize * 2, height, lightGrey);
 
   int enabledHeight = height * matrix->brightness() / 100.0;
-  FillRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight + (height - enabledHeight), width - borderSize * 2, enabledHeight, whiteColor);
+  FillRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight + (height - enabledHeight), totalWidth - borderSize * 2, enabledHeight, whiteColor);
 }
 
 char const *writeFont(const unsigned char fontArray[], const int fontSize) {
@@ -180,17 +179,19 @@ void displayLoop(RGBMatrix *matrix) {
     dirtyCanvas = false;
     tmillis_t frame_start = GetTimeInMillis();
     if (display_status == DISPLAY_ENABLED) {
-      if (next_sequence_received) {
+      
+  Sequence *seq = gl_sequences[gl_sequence_index];
+      if (next_sequence_received || seq->isExpired() ) {
         if (workerThread != 0) {
           pthread_cancel(workerThread);
           workerThread = 0;
         } else {
-          goToNextSequence();
+          seq = goToNextSequence();
           shouldRedrawSequenceName = true;
         }
       }
 
-      Sequence *seq = gl_sequences[gl_sequence_index];
+      
       if (workerThread == 0 && false == seq->nextCollectionIsReady()) {
         fprintf(stderr, " => %d loaded files in collection %s, need %d\n", seq->nextCollection()->loadedFiles.size(), seq->nextCollection()->regex, seq->nextCollection()->visibleImages);
 
@@ -208,7 +209,7 @@ void displayLoop(RGBMatrix *matrix) {
           if (seq->currentCollection() == NULL && (int)threadRetval == 0) {
             seq->forwardCollection();
             currentImages = &(seq->currentCollection()->loadedFiles);
-            seq->currentCollection()->setDisplayStartTime(GetTimeInMillis() + (seq->transient ? 0 :  3 * 1000));
+            seq->currentCollection()->setDisplayStartTime(GetTimeInMillis() + (seq->transient ? 0 : 3 * 1000));
           } else if (threadRetval == PTHREAD_CANCELED) {
             fprintf(stderr, "## Thread has been canceled, go to next sequence");
             goToNextSequence();
@@ -222,18 +223,16 @@ void displayLoop(RGBMatrix *matrix) {
         seq->currentCollection()->setDisplayStartTime(GetTimeInMillis());
       }
 
-      if (seq->currentCollection() == NULL || seq->currentCollection()->displayStartTime() > GetTimeInMillis()) {
+      if (seq->currentCollection() == NULL || seq->currentCollection()->displayStartTime() > GetTimeInMillis()) { // bouger eq->currentCollection()->displayStartTime() sur la sequence
         if (shouldRedrawSequenceName == true && seq->transient == false) {
-          Color backgroundColor = {.r = 241, .g = 172, .b = 71};
           Color blackColor = {.r = 0, .g = 0, .b = 0};
-
+        offscreen_canvas->Clear();
           int textWidth = DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), blackColor, NULL, seq->name(), 0);
 
-          FillRectangle(offscreen_canvas, 0, 0, matrix->width(), matrix->height(), backgroundColor);
-          DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2 + 1, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2 + 1, blackColor, NULL, seq->name(), 0);
+          FillRectangle(offscreen_canvas, 0, matrix->height() / 4, matrix->width(), matrix->height() / 2, blueColor);
+          DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2 + 1, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2 + 1, pinkColor, NULL, seq->name(), 0);
 
-          DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, {.r = 255, .g = 255, .b = 255}, NULL,
-                   seq->name(), 0);
+          DrawText(offscreen_canvas, statusFont, (matrix->width() - textWidth) / 2, statusFont.baseline() + (matrix->height() - statusFont.baseline()) / 2, whiteColor, NULL, seq->name(), 0);
 
           shouldRedrawSequenceName = false;
           dirtyCanvas = true;
@@ -243,7 +242,6 @@ void displayLoop(RGBMatrix *matrix) {
         shouldChangeCollection = false;
         bool shouldChangeDisplay = false;
 
-//    fprintf(stderr, "XCurrent time is %" PRId64 "\n", GetTimeInMillis());
         for (unsigned short i = 0; i < seq->currentCollection()->visibleImages; i++) {
           if (true == (GetTimeInMillis() > (*currentImages)[i]->nextFrameTime)) {
             shouldChangeDisplay = true;
@@ -278,7 +276,7 @@ void displayLoop(RGBMatrix *matrix) {
                 delay_time_us = 100 * 1000; // 1/10sec
                 fprintf(stderr, "CRAPPY TIMING USE DEFAULT");
               }
-              (*currentImages)[i]->nextFrameTime =  (*currentImages)[i]->nextFrameTime + delay_time_us / 1000.0; 
+              (*currentImages)[i]->nextFrameTime = (*currentImages)[i]->nextFrameTime + delay_time_us / 1000.0;
             }
             blitzFrameInCanvas(matrix, offscreen_canvas, (*currentImages)[i], i, seq->currentCollection()->screenMode, show_filename ? &smallestFont : NULL, &statusFont);
           }
@@ -305,35 +303,50 @@ void displayLoop(RGBMatrix *matrix) {
     }
     tmillis_t ellapsedTime = GetTimeInMillis() - frame_start;
     tmillis_t next_frame = frame_start + (1000.0 / FRAME_PER_SECOND) - ellapsedTime;
-if (next_frame - frame_start < 0) {
-  fprintf(stderr, "LOST FRAMES\n");
-}
+    if (next_frame - frame_start < 0) {
+      fprintf(stderr, "LOST FRAMES\n");
+    }
     SleepMillis(next_frame - frame_start);
   }
 }
 
 int main(int argc, char *argv[]) {
+  fprintf(stdout, "\033[0;36mStarting Mega DMD\033[0m\n");
   srand(time(0));
   InitializeMagick(*argv);
   pthread_t remoteControlThread = 0;
-  std::vector<const char *> gl_filenames = std::vector<const char *>();
+  std::vector<const char *> filenames = std::vector<const char *>();
 
   RGBMatrix::Options matrix_options;
   rgb_matrix::RuntimeOptions runtime_opt;
   if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_opt)) {
     return usage(argv[0]);
   }
-  int displayDuration = DEFAULT_DISPLAY_DURATION;
-
+  int displayDuration = DEFAULT_COLLECTION_DURATION;
+  int sequenceDuration = DEFAULT_SEQUENCE_DURATION;
   const char *stream_output = NULL;
   int opt;
-  while ((opt = getopt(argc, argv, "w:c:hd:c:f:s:")) != -1) {
+
+  static struct option long_options[] = {{"wait", required_argument, 0, 'w'},
+                                         {"directory", required_argument, 0, 'd'},
+                                         {"cross", required_argument, 0, 'c'},
+                                         {"full", required_argument, 0, 'f'},
+                                         {"sequence", required_argument, 0, 's'},
+                                         {"sequence_duration", required_argument, 0, 'x'},
+
+                                         {"help", no_argument, 0, 0},
+                                         {0, 0, 0, 0}};
+  int option_index = 0;
+  while ((opt = getopt_long(argc, argv, "w:hd:c:f:s:x:", long_options, &option_index)) != -1) {
     switch (opt) {
+    case 'x':
+      sequenceDuration = atoi(optarg);
+      break;
     case 'w':
       displayDuration = atoi(optarg);
       break;
     case 'd':
-      getFilenamesFromDirectory(&gl_filenames, optarg);
+      getFilenamesFromDirectory(&filenames, optarg);
       break;
     case 'c': {
       FileCollection *newCollection = new FileCollection(Cross, displayDuration, optarg);
@@ -345,6 +358,7 @@ int main(int argc, char *argv[]) {
     } break;
     case 's': {
       Sequence *newSequence = new Sequence(optarg);
+      newSequence->setDisplayTime(sequenceDuration);
       gl_sequences.push_back(newSequence);
     } break;
     case 'h':
@@ -353,16 +367,16 @@ int main(int argc, char *argv[]) {
     }
   }
 
- Sequence *newSequence = new Sequence("splash", true);
+  Sequence *newSequence = new Sequence("splash", true);
+  newSequence->setDisplayTime(8);
+  FileCollection *newCollection = new FileCollection(Splash, 0, SPLASH_GIF);
+  newSequence->collections.push_back(newCollection);
+  gl_sequences.insert(gl_sequences.begin(), newSequence);
 
-FileCollection *newCollection = new FileCollection(Splash, 0, SPLASH_GIF);
-newSequence->collections.push_back(newCollection);
-gl_sequences.insert(gl_sequences.begin(), newSequence);
-
-  fprintf(stderr, "%d valid files\n", gl_filenames.size());
+  fprintf(stderr, "%d valid files\n", filenames.size());
 
   for (auto &sequence : gl_sequences) {
-    sequence->loadCollections(gl_filenames);
+    sequence->loadCollections(filenames);
     sequence->printContent();
   }
 
@@ -373,7 +387,7 @@ gl_sequences.insert(gl_sequences.begin(), newSequence);
     return 1;
   }
 
-  printf("Size: %dx%d. Hardware gpio mapping: %s\n", matrix->width(), matrix->height(), matrix_options.hardware_mapping);
+  printf("Matrix size: %dx%d. Hardware gpio mapping: %s\n", matrix->width(), matrix->height(), matrix_options.hardware_mapping);
 
   signal(SIGTERM, InterruptHandler);
   signal(SIGINT, InterruptHandler);

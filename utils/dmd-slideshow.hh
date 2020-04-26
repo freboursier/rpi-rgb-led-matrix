@@ -19,6 +19,5 @@ typedef int64_t tmillis_t;
 static const tmillis_t distant_future = (1LL << 40); // that is a while.
 
 void changeBrightnessLevel(RGBMatrix *matrix, int newLevel);
-void goToNextSequence();
 
 #endif

@@ -1,5 +1,6 @@
 #include "Sequence.hh"
 #include <regex.h>
+#include "dmd-slideshow-utils.hh"
 
 using std::vector;
 
@@ -46,16 +47,15 @@ FileCollection *Sequence::currentCollection() {
   return collections[currentCollectionIdx];
 }
 
-char const*Sequence::stringForScreenMode(ScreenMode screenMode)
-{
+char const *Sequence::stringForScreenMode(ScreenMode screenMode) {
   switch (screenMode) {
-    case FullScreen:
+  case FullScreen:
     return "Full screen";
-    case Cross:
+  case Cross:
     return "Cross";
-    case Splash:
+  case Splash:
     return "Splash";
-    default:
+  default:
     return "Unknown";
   }
 }
@@ -92,6 +92,8 @@ void Sequence::forwardCollection() {
       delete current->loadedFiles[i];
     }
     current->loadedFiles.erase(current->loadedFiles.begin(), current->loadedFiles.begin() + current->visibleImages);
+  } else {
+    _displayStartTime = GetTimeInMillis();
   }
 
   currentCollectionIdx = nextCollectionIdx;
@@ -112,4 +114,25 @@ bool Sequence::nextCollectionIsReady() {
 }
 const char *Sequence::name() {
   return _name;
+}
+
+void Sequence::setDisplayTime(int newDisplayTime) {
+  _displayTime = newDisplayTime;
+}
+
+int Sequence::displayTime() {
+  return _displayTime;
+}
+
+void Sequence::setDisplayStartTime(tmillis_t newStartTime) {
+  _displayStartTime = newStartTime;
+}
+
+tmillis_t Sequence::displayStartTime() {
+  return _displayStartTime;
+}
+
+bool  Sequence::isExpired()
+{
+  return (_displayStartTime + _displayTime * 1000 < GetTimeInMillis());
 }
