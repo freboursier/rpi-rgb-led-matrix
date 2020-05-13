@@ -13,13 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
 
-// To use this image viewer, first get image-magick development files
-// $ sudo apt-get install libgraphicsmagick++-dev libwebp-dev
-//
-// Then compile with
-// $ make dmd-slideshow
-
-#include "content-streamer.h"
 #include "graphics.h"
 #include "led-matrix.h"
 #include "pixel-mapper.h"
@@ -35,12 +28,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <algorithm>
 #include <getopt.h>
-#include <inttypes.h>
 
 #include <map>
-#include <string>
 #include <vector>
 
 #include "IRRemote.hh"
@@ -57,7 +47,7 @@
 
 #define DEBUG 0
 #define BRIGHTNESS_DISPLAY_DURATION 3
-#define FRAME_PER_SECOND 20 // Don't go higher than 20 / 25 or you will drop frames
+#define FRAME_PER_SECOND 25 // Don't go higher than 20 / 25 or you will drop frames
 #define DEFAULT_COLLECTION_DURATION 10
 #define DEFAULT_SEQUENCE_DURATION 3600
 #define SPLASH_GIF "LOGO_RPI2DMD_Impact_RattenJager.gif"
@@ -71,7 +61,6 @@ using rgb_matrix::Font;
 using rgb_matrix::FrameCanvas;
 using rgb_matrix::GPIO;
 using rgb_matrix::RGBMatrix;
-using rgb_matrix::StreamReader;
 
 time_t gl_brightness_timeout = 0;
 
@@ -93,7 +82,6 @@ Sequence *goToNextSequence() {
   fprintf(stderr, "Select next sequence, current is %s\n", gl_sequences[gl_sequence_index]->name());
   if (gl_sequences[gl_sequence_index]->transient == true) {
     gl_sequences.erase(gl_sequences.begin() + gl_sequence_index);
-    fprintf(stderr, "Trash transient sequence");
   } else {
     int nextSequenceIndex = (gl_sequence_index + 1) % gl_sequences.size();
     if (nextSequenceIndex != gl_sequence_index) {
@@ -131,7 +119,7 @@ void drawBrightness(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, Font *smal
   FillRectangle(offscreen_canvas, originX + borderSize, originY + textAreaHeight + (height - enabledHeight), totalWidth - borderSize * 2, enabledHeight, whiteColor);
 }
 
-char const *writeFont(const unsigned char fontArray[], const int fontSize) {
+void loadFont(Font *inFont, const unsigned char fontArray[], const int fontSize) {
   char const *fileTemplate = "/tmp/font.temp";
 
   int fd = open(fileTemplate, O_CREAT | O_TRUNC | O_WRONLY);
@@ -142,7 +130,10 @@ char const *writeFont(const unsigned char fontArray[], const int fontSize) {
   }
   close(fd);
 
-  return fileTemplate;
+  if (!((*inFont).LoadFont(fileTemplate))) {
+    fprintf(stderr, "Couldn't load smallFont \n");
+    exit(1);
+  }
 }
 
 void displayLoop(RGBMatrix *matrix) {
@@ -159,45 +150,25 @@ void displayLoop(RGBMatrix *matrix) {
   Font smallFont;
   Font smallestFont;
 
-  char const *fontFilename = writeFont(smallFontHex, smallFontHex_size);
-  if (!smallFont.LoadFont(fontFilename)) {
-    fprintf(stderr, "Couldn't load smallFont \n");
-    exit(1);
-  }
-  fontFilename = writeFont(largeFontHex, largeFontHex_size);
-  if (!statusFont.LoadFont(fontFilename)) {
-    fprintf(stderr, "Couldn't load largefont \n");
-    exit(1);
-  }
-  fontFilename = writeFont(smallestFontHex, smallestFontHex_size);
-  if (!smallestFont.LoadFont(fontFilename)) {
-    fprintf(stderr, "Couldn't load smallest font \n");
-    exit(1);
-  }
+  loadFont(&smallFont, smallFontHex, smallFontHex_size);
+  loadFont(&smallestFont, smallestFontHex, smallestFontHex_size);
+  loadFont(&statusFont, largeFontHex, largeFontHex_size);
 
   while (!interrupt_received) {
     dirtyCanvas = false;
     tmillis_t frame_start = GetTimeInMillis();
     if (display_status == DISPLAY_ENABLED) {
-      
-  Sequence *seq = gl_sequences[gl_sequence_index];
-      if (next_sequence_received || seq->isExpired() ) {
-        if (workerThread != 0) {
-          pthread_cancel(workerThread);
-          workerThread = 0;
-        } else {
+
+      Sequence *seq = gl_sequences[gl_sequence_index];
+      if (next_sequence_received || seq->isExpired()  ) {
           seq = goToNextSequence();
           shouldRedrawSequenceName = true;
-        }
       }
 
-      
       if (workerThread == 0 && false == seq->nextCollectionIsReady()) {
-        fprintf(stderr, " => %d loaded files in collection %s, need %d\n", seq->nextCollection()->loadedFiles.size(), seq->nextCollection()->regex, seq->nextCollection()->visibleImages);
-
         int ret = pthread_create(&workerThread, NULL, LoadFile, (void *)seq);
         if (ret) {
-          printf("Failed to create worker thread : %d\n", ret);
+          printf("Failed to create worker thread : %d %s\n", ret, strerror(errno));
         }
       }
 
@@ -226,7 +197,7 @@ void displayLoop(RGBMatrix *matrix) {
       if (seq->currentCollection() == NULL || seq->currentCollection()->displayStartTime() > GetTimeInMillis()) { // bouger eq->currentCollection()->displayStartTime() sur la sequence
         if (shouldRedrawSequenceName == true && seq->transient == false) {
           Color blackColor = {.r = 0, .g = 0, .b = 0};
-        offscreen_canvas->Clear();
+          offscreen_canvas->Clear();
           int textWidth = DrawText(offscreen_canvas, statusFont, 0, 0 + statusFont.baseline(), blackColor, NULL, seq->name(), 0);
 
           FillRectangle(offscreen_canvas, 0, matrix->height() / 4, matrix->width(), matrix->height() / 2, blueColor);
@@ -368,7 +339,7 @@ int main(int argc, char *argv[]) {
   }
 
   Sequence *newSequence = new Sequence("splash", true);
-  newSequence->setDisplayTime(8);
+  newSequence->setDisplayTime(9);
   FileCollection *newCollection = new FileCollection(Splash, 0, SPLASH_GIF);
   newSequence->collections.push_back(newCollection);
   gl_sequences.insert(gl_sequences.begin(), newSequence);

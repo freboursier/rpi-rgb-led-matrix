@@ -107,10 +107,8 @@ void blitzFrameInCanvas(RGBMatrix *matrix, FrameCanvas *offscreen_canvas, Loaded
     }
   }
     if (screenMode == Splash) {
-
-
     int splashTextX = 10;
-
+    
     DrawText(offscreen_canvas, *largeFont, splashTextX + 1, 1 + largeFont->baseline(), pinkColor, NULL, "MEGA DMD by monk", -1);
     DrawText(offscreen_canvas, *largeFont, splashTextX, largeFont->baseline(), blueColor, NULL, "MEGA DMD by monk", -1);
 
@@ -140,7 +138,6 @@ void drawCross(RGBMatrix *matrix, FrameCanvas *offscreen_canvas) {
 void *LoadFile(void *inParam) {
   Sequence *sequence = (Sequence *)inParam;
   FileCollection *collection = sequence->nextCollection();
-  fprintf(stderr, "LOAD FILE, got %d files, run until we got %d\n", collection->loadedFiles.size(), sequence->nextCollectionTargetSize());
   while (collection->loadedFiles.size() < sequence->nextCollectionTargetSize()) {
     MagickWand *tempWand = NewMagickWand();
     int count = 0;

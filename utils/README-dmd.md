@@ -3,5 +3,3 @@
 # En cours
 
   * pétage de plombs si on change de séquence trop vite
-  * changement automatique de séquence
-  * Look de la page intermédiaire

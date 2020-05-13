@@ -12,15 +12,13 @@ Sequence::Sequence(const char *newName) {
 Sequence::Sequence(const char *newName, bool newTransient) {
   _name = newName;
   transient = newTransient;
+  _displayStartTime = GetTimeInMillis();
 }
 
 Sequence::~Sequence() {}
 
 void Sequence::loadCollections(vector<const char *> filenames) {
-  fprintf(stderr, "Attempt to load sequence %s", _name);
-
   for (auto &collection : collections) {
-    fprintf(stderr, "Fill collection %s\n", collection->regex);
 
     regex_t regex;
 
@@ -35,7 +33,10 @@ void Sequence::loadCollections(vector<const char *> filenames) {
         collection->filePaths.push_back(filename);
       }
     }
-    fprintf(stderr, "\t%d pictures\n", collection->filePaths.size());
+    if (collection->filePaths.size() == 0) {
+      fprintf(stderr, "A collection (%s/%s) cannot be empty\n", _name, collection->regex);
+      exit(1);
+    }
     regfree(&regex);
   }
 }
@@ -61,10 +62,10 @@ char const *Sequence::stringForScreenMode(ScreenMode screenMode) {
 }
 
 void Sequence::printContent() {
-  fprintf(stderr, "Sequence %s / %d collections\n", _name, collections.size());
+  fprintf(stderr, "Sequence %s / %d collection(s)\n", _name, collections.size());
   for (auto &collection : collections) {
     char const *displayMode = stringForScreenMode(collection->screenMode);
-    fprintf(stderr, "\tCollection %s => %d images / %d seconds / display mode %s\n", collection->regex, collection->filePaths.size(), collection->displayDuration, displayMode);
+    fprintf(stderr, "\tCollection %s => %d images / %d second(s) / %s\n", collection->regex, collection->filePaths.size(), collection->displayDuration, displayMode);
   }
 }
 
@@ -87,7 +88,6 @@ void Sequence::reset() {
 void Sequence::forwardCollection() {
   FileCollection *current = currentCollection();
   if (current != NULL) {
-    fprintf(stderr, "About to DELETE %d loaded files\n", current->visibleImages);
     for (int i = 0; i < current->visibleImages; i++) {
       delete current->loadedFiles[i];
     }
@@ -98,7 +98,6 @@ void Sequence::forwardCollection() {
 
   currentCollectionIdx = nextCollectionIdx;
   nextCollectionIdx = (nextCollectionIdx + 1) % collections.size();
-  fprintf(stderr, "FWD, new collection is %s\n", currentCollection()->regex);
 }
 
 // The next collection should contains this many LoadedFile to be shown

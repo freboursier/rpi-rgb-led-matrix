@@ -1,6 +1,8 @@
 #ifndef SLIDESHOW_TYPE_H
 #define SLIDESHOW_TYPE_H
 #include "graphics.h"
+#include <stdio.h>
+
 using rgb_matrix::Color;
 typedef int64_t tmillis_t;
 
