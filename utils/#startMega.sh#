@@ -17,7 +17,7 @@ sudo ir-keytable -c -w  /home/pi/17buttons-remote.conf
 sudo  ${DMD_SLIDESHOW} ${DMD_CONFIG}\
   --directory /home/pi/gif \
       --sequence "PINBALL" --wait 0 --full 'PINBALL_STORY.*.gif' \
-#        --sequence "NINTENDO" --wait 6 --full '.*OTHER_NINTENDO.*' --wait 6 --full 'SNES.*'\
+#        --sequence "NINTENDO" --wait 6 --full '.*OTHER_NINTENDO.--sequence "DBZ" --wait 6 --full ".*DBZ.*" *'x --wait 6 --full 'SNES.*'\
       --sequence "DBZ" --wait 6 --full ".*DBZ.*" \
       --sequence "SONIC" --wait 4 --cross '.*sonic.*.gif' --wait 6 --full '.*sonic.*' \
       --sequence "Metal Slug" --wait 6 --full ".*MetalSlug.*" \

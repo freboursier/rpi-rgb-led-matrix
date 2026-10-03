@@ -19,7 +19,7 @@ HEXEMBED=./hexembed
 #MAGICK_CXXFLAGS?=`GraphicsMagick++-config --cppflags --cxxflags`
 #MAGICK_LDFLAGS?=`GraphicsMagick++-config --ldflags --libs`
 MAGICK_CXXFLAGS?=`GraphicsMagickWand-config --cppflags `
-MAGICK_LDFLAGS?=`GraphicsMagickWand-config --ldflags --libs`
+MAGICK_LDFLAGS?=-L/usr/lib -Wl,-z,relro -Wl,-z,now -L/usr/lib/X11 -lGraphicsMagickWand -lGraphicsMagick -ljbig -lwebp -lwebpmux -llcms2 -ltiff -lfreetype -ljpeg -lpng16 -lwmflite -lXext -lSM -lICE -lX11 -llzma -lbz2 -lxml2 -lz -lzstd -lm -lpthread -lgomp
 
 
 AV_CXXFLAGS=`pkg-config --cflags  libavcodec libavformat libswscale libavutil`
